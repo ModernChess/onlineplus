@@ -68,10 +68,13 @@
 
         // Append to app wrapper or body once DOM is ready
         const target = document.querySelector('.app-wrapper') || document.body;
-        target.appendChild(container);
+        if (target) {
+            target.appendChild(container);
+        }
 
         document.getElementById('clearConsole')?.addEventListener('click', () => {
-            logs.innerHTML = '';
+            const logsEl = document.getElementById('console-logs');
+            if (logsEl) logsEl.innerHTML = '';
         });
     }
 
@@ -112,13 +115,16 @@
     window.onerror = function (msg, url, lineNo, columnNo, error) {
         const filePath = url ? url.split('/').pop() : 'unknown';
         appendLog(`[FATAL] ${msg} (${filePath}:${lineNo}:${columnNo})`, '#ff5252');
-        return false; // Let default browser error handling run too
+        return false;
     };
 
     // 3. Catch Unhandled Promise Rejections (Async/Fetch errors)
     window.addEventListener('unhandledrejection', function (event) {
         appendLog(`[REJECTION] ${event.reason?.message || event.reason}`, '#ff5252');
     });
+
+    // Periodically monitor login status changes to render logger upon successful admin login
+    setInterval(ensureConsoleDOM, 1000);
 
     // Ensure DOM binding hook runs safely
     if (document.readyState === 'loading') {
