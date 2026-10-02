@@ -349,7 +349,6 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
         unitTypeVal = 'land';
         unitRange = 3;
     } else if (typeLower === 'engineer') {
-        // Configured engineer with air movement type
         unitTypeVal = 'air';
         unitRange = 3;
     } else if (typeLower === 'plane') {
@@ -387,7 +386,8 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     logToConsole(`Placed new unit ${newUnit.name} at coordinates [${clickedCol}, ${clickedRow}]`);
 
     if (currentMatchId) {
-        update(ref(db, `matches/${currentMatchId}`), { 
+        // FIXED: Target matches_plus instead of matches
+        update(ref(db, `matches_plus/${currentMatchId}`), { 
             units: activeUnits,
             coins: coinsRefToUse 
         });
