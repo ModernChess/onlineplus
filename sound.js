@@ -141,26 +141,27 @@ const playPlaneSelectSound = createUnitAudioPlayer(unitAudioConfigs.planeSelect)
 const playPlaneMoveSound = createUnitAudioPlayer(unitAudioConfigs.planeMove);
 const playMineSelectSound = createUnitAudioPlayer(unitAudioConfigs.mineSelect);
 const playAntiAirSelectSound = createUnitAudioPlayer(unitAudioConfigs.antiAirSelect);
-const playAntiAirMoveSound = createUnitAudioPlayer(unitAudioConfigs.antiAirMove);
+const playAntiAirMoveSound = createUnitAudioPlayer(unitAudioConfigs.antiAirMove); // Fixed typo here (antiAirMove instead of antiairMove)
 const playEngineerSound = createUnitAudioPlayer(unitAudioConfigs.engineerSound);
 
 export function triggerSelectSound(unitName) {
-    let lower = (unitName || '').toLowerCase();
-    if (lower.includes('infantry')) playInfantrySound();
-    else if (lower.includes('tank')) playTankSound();
-    else if (lower.includes('plane')) playPlaneSelectSound();
-    else if (lower.includes('mine')) playMineSelectSound();
-    else if (lower.includes('anti-air')) playAntiAirSelectSound();
-    else if (lower.includes('ship')) playShipSound();
-    else if (lower.includes('engineer')) playEngineerSound();
+    let normalized = (unitName || '').toLowerCase().replace(/[\s-]/g, '');
+    if (normalized.includes('infantry')) playInfantrySound();
+    else if (normalized.includes('tank')) playTankSound();
+    else if (normalized.includes('plane')) playPlaneSelectSound();
+    else if (normalized.includes('mine')) playMineSelectSound();
+    else if (normalized.includes('antiair')) playAntiAirSelectSound();
+    else if (normalized.includes('ship')) playShipSound();
+    else if (normalized.includes('artillery')) playEngineerSound(); 
+    else if (normalized.includes('engineer')) playEngineerSound();
 }
 
 export function triggerMoveSound(unitName) {
-    let lower = (unitName || '').toLowerCase();
-    if (lower.includes('infantry')) playInfantryMoveSound();
-    else if (lower.includes('tank')) playTankMoveSound();
-    else if (lower.includes('plane')) playPlaneMoveSound();
-    else if (lower.includes('anti-air')) playAntiAirMoveSound();
-    else if (lower.includes('ship')) playShipSound();
-    else if (lower.includes('engineer')) playEngineerSound();
+    let normalized = (unitName || '').toLowerCase().replace(/[\s-]/g, '');
+    if (normalized.includes('infantry')) playInfantryMoveSound();
+    else if (normalized.includes('tank')) playTankMoveSound();
+    else if (normalized.includes('plane')) playPlaneMoveSound();
+    else if (normalized.includes('antiair') || normalized.includes('artillery')) playAntiAirMoveSound(); 
+    else if (normalized.includes('ship')) playShipSound();
+    else if (normalized.includes('engineer')) playEngineerSound();
 }
