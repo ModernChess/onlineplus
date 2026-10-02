@@ -253,8 +253,12 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 4. Anti-Air Ranged Combat Resolution
-    let antiairs = unitsList.filter(u => u.name === 'Anti-Air');
+        // 4. Anti-Air Ranged Combat Resolution (Fixed Naming/Call Matching)
+    let antiairs = unitsList.filter(u => {
+        let normName = (u.name || '').toLowerCase().replace(/[\s-]/g, '');
+        return normName === 'antiair';
+    });
+    
     antiairs.forEach(antiair => {
         let rangeTiles = getUnitMacroRangeTiles(antiair);
         rangeTiles.forEach(tile => {
