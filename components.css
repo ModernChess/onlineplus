@@ -297,7 +297,7 @@
     position: relative;
     width: 100%;
     max-width: 400px;
-    aspect-ratio: 1 / 1; /* Changed from 24 / 34 to a 1:1 ratio for an 18x18 grid */
+    aspect-ratio: 24 / 34; /* Explicitly set to a 24 width by 34 height ratio */
     background: var(--ui-bg-image);
     background-size: 100% 100%;
     background-position: center;
@@ -311,7 +311,7 @@
 
 @media (min-width: 1024px) {
     #canvas-container {
-        max-width: 520px; 
+        max-width: 440px; /* Scaled width for desktop monitors to fit the 24:34 height proportion comfortably */
         border-radius: 18px;
         padding: 14px;
     }
