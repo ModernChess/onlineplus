@@ -170,7 +170,7 @@ function startTurnTimer(matchIdRef) {
             updateTurnButtonState(currentTurn, playerTeam);
 
             if (matchIdRef.current) {
-                update(ref(db, `matches/${matchIdRef.current}`), {
+                update(ref(db, `matches_plus/${matchIdRef.current}`), {
                     turn: nextTurn,
                     lastAction: {
                         type: 'TIMEOUT_TURN_CHANGE',
@@ -419,7 +419,7 @@ function initCanvasGame() {
                     if (turnChanged) {
                         payload.turn = nextTurn;
                     }
-                    update(ref(db, `matches/${currentMatchId}`), payload);
+                    update(ref(db, `matches_plus/${currentMatchId}`), payload);
                 }
 
                 selectedUnit = null;
