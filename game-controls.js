@@ -213,7 +213,7 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
             afkBtn.onclick = () => {
                 if (matchIdRef.current) {
                     const afkField = teamRef.current === 'blue' ? 'blueAfk' : 'redAfk';
-                    update(ref(db, `matches/${matchIdRef.current}`), { [afkField]: true });
+                    update(ref(db, `matches_plus/${matchIdRef.current}`), { [afkField]: true });
                 }
                 if (animRef.current) cancelAnimationFrame(animRef.current);
                 matchIdRef.current = null;
@@ -244,7 +244,7 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
                 updateTurnStateCallback();
 
                 if (matchIdRef.current) {
-                    update(ref(db, `matches/${matchIdRef.current}`), { turn: nextTurn });
+                    update(ref(db, `matches_plus/${matchIdRef.current}`), { turn: nextTurn });
                 }
             };
             surrenderBtn.parentNode.insertBefore(changeTurnBtn, document.getElementById('afkBtn').nextSibling);
