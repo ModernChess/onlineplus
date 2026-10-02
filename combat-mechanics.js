@@ -253,12 +253,8 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-        // 4. Anti-Air Ranged Combat Resolution (Fixed Naming/Call Matching)
-    let antiairs = unitsList.filter(u => {
-        let normName = (u.name || '').toLowerCase().replace(/[\s-]/g, '');
-        return normName === 'antiair';
-    });
-    
+    // 4. Anti-Air Ranged Combat Resolution
+    let antiairs = unitsList.filter(u => u.name === 'Anti-Air');
     antiairs.forEach(antiair => {
         let rangeTiles = getUnitMacroRangeTiles(antiair);
         rangeTiles.forEach(tile => {
@@ -425,6 +421,26 @@ export function resolveCombat(unitsList, logCallback) {
                     });
                 }
                 if (logCallback) {
+                    logCallback(`Combat! Ships from opposing teams collided at adjacency and mutually destroyed each other!`);
+                }
+            }
+        });
+    });
+
+    // 9. Infantry & Tank Adjacent Combat Resolution (Fixed standard loop structure)
+    let infantryAndTanks = unitsList.filter(u => (u.name === 'Infantry' || u.name === 'Tank') && !u.stalemate && !stalematedUnits.has(u.id));
+    infantryAndTanks.forEach(attacker => {
+        let enemyUnits = unitsList.filter(u => u.team !== attacker.team);
+        enemyUnits.forEach(enemy => {
+            if (infantryTankVulnerableUnits.has(enemy.name)) {
+                if (areUnitsAdjacent(attacker, enemy)) {
+                    if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
+                        destroyedIds.add(enemy.id);
+                        unitsToDestroy.push({ 
+                            unit: enemy, destroyedBy: attacker.name,
+                            reason: `${attacker.name} (${attacker.team}) adjacently engaged and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
+                        });
+                        if (logCallback) {
                             logCallback(`Combat! ${attacker.name} (${attacker.team}) engaged and destroyed adjacent enemy ${enemy.name} (${enemy.team})!`);
                         }
                     }
