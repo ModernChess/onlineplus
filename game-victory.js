@@ -48,7 +48,8 @@ export function checkBaseCaptureVictory(unit, moveKey, matchId, logger, isGameOv
 
 export function endGameSessionState(matchId, winnerTeam) {
     if (matchId) {
-        update(ref(db, `matches/${matchId}`), {
+        // FIXED: Target matches_plus instead of matches
+        update(ref(db, `matches_plus/${matchId}`), {
             status: 'ended',
             winner: winnerTeam
         });
