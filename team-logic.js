@@ -1,4 +1,4 @@
-// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values
+// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values[span_3](start_span)[span_3](end_span)
 import { 
     cols, 
     rows,
@@ -10,13 +10,21 @@ import {
     blueBasesList,
     navList,
     artList,
-    tList
+    tList,
+    goldCoreList
 } from './game-config.js';
 
 export const rbList = redBasesList;
 export const bbList = blueBasesList;
 
 export let tileCaptures = {};
+
+// Helper to calculate Chebyshev distance between two coordinates ("C,R")
+function getChebyshevDistance(coordA, coordB) {
+    let [c1, r1] = coordA.split(',').map(Number);
+    let [c2, r2] = coordB.split(',').map(Number);
+    return Math.max(Math.abs(c1 - c2), Math.abs(r1 - r2));
+}
 
 export const goldCoreClusters = [
     {
@@ -68,6 +76,29 @@ export const goldCoreClusters = [
         linked: ["BA48", "BB48", "AZ49", "BB49", "AZ50", "BA50", "BB50"]
     }
 ];
+
+// Automatically link artillery, tank, and port tiles to their closest Gold Core via Chebyshev distance
+[...artList, ...tList, ...navList].forEach(tileItem => {
+    let parsedTile = parseCoord(tileItem);
+    if (!parsedTile) return;
+
+    let closestCore = goldCoreList[0];
+    let minDistance = Infinity;
+
+    goldCoreList.forEach(coreStr => {
+        let parsedCore = parseCoord(coreStr);
+        let dist = getChebyshevDistance(parsedTile, parsedCore);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestCore = coreStr;
+        }
+    });
+
+    let targetCluster = goldCoreClusters.find(c => c.gc === closestCore);
+    if (targetCluster && !targetCluster.linked.includes(tileItem)) {
+        targetCluster.linked.push(tileItem);
+    }
+});
 
 export const tileCoinValues = {
     'gold': 0.5,
@@ -126,9 +157,6 @@ export function initTileCaptures() {
     registerList(blueBasesList, 'blue base', 'blue');    
     registerList(bbcList, 'blue base command', 'blue');  
     registerList(rbcList, 'red base command', 'red');    
-    registerList(artList, 'artillery', null);            
-    registerList(tList, 'tank', null);            
-    registerList(navList, 'port', null);
 
     goldCoreClusters.forEach(cluster => {
         let gcKey = parseCoord(cluster.gc);
@@ -138,7 +166,12 @@ export function initTileCaptures() {
         cluster.linked.forEach(link => {
             let linkKey = parseCoord(link);
             if (linkKey) {
-                tileCaptures[linkKey] = { type: 'gold core linked', gcCoord: gcKey, capturedBy: null };
+                let tName = 'gold core linked';
+                if (artList.includes(link)) tName = 'artillery';
+                else if (tList.includes(link)) tName = 'tank';
+                else if (navList.includes(link)) tName = 'port';
+
+                tileCaptures[linkKey] = { type: tName, gcCoord: gcKey, capturedBy: null };
             }
         });
     });
