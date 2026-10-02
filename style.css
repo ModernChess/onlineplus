@@ -1,1 +1,300 @@
-dhhdhdhd
+@import url('components.css');
+
+:root {
+    --bg-color: #121212;
+    --border-color: rgba(0, 0, 0, 0.2);
+    --primary: #4CAF50;
+    --secondary: #2196F3;
+    --danger: #ff5252;
+    
+    /* Updated text color to white with outline shadow variables */
+    --text-color: #ffffff; 
+    --text-muted: #e0e0e0; 
+    --text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 2px rgba(0, 0, 0, 0.8), 1px -1px 2px rgba(0, 0, 0, 0.8), -1px 1px 2px rgba(0, 0, 0, 0.8);
+    
+    --repo-base-url: 'https://raw.githubusercontent.com/ModernChess/assets-images/main/';
+    --bg-image: url('https://raw.githubusercontent.com/ModernChess/assets-images/main/background.jpg'); 
+    --ui-bg-image: url('https://raw.githubusercontent.com/ModernChess/assets-images/main/uiback.png');
+}
+
+body {
+    margin: 0;
+    padding: 20px;
+    color: var(--text-color);
+    font-family: 'Fredoka', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    box-sizing: border-box;
+    position: relative;
+    overflow-x: hidden;
+    background-color: var(--bg-color);
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(rgba(18, 18, 18, 0.4), rgba(18, 18, 18, 0.4)), var(--bg-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(5px);
+    transform: scale(1.05);
+    z-index: -1;
+}
+
+/* MOBILE DEFAULT WIDTH SIZING */
+.app-wrapper {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+@media (min-width: 1024px) {
+    .app-wrapper {
+        max-width: 650px; 
+    }
+}
+
+.app-logo-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.app-logo {
+    max-width: 200px;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+@media (min-width: 1024px) {
+    .app-logo {
+        max-width: 280px; 
+    }
+}
+
+/* LOADING SCREEN OVERLAY */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.4s ease;
+}
+
+.spinner {
+    width: 35px;
+    height: 35px;
+    border: 3px solid rgba(255,255,255,0.25);
+    border-top: 3px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    font-size: 0.85rem;
+    color: #ccc;
+    letter-spacing: 0.5px;
+}
+
+.version-badge {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    background: #ff9800;
+    color: #121212;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 12px;
+    z-index: 1000;
+}
+
+.screen {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* Main Cards UI */
+.card {
+    background: var(--ui-bg-image);
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    padding: 24px;
+    border-radius: 14px;
+    border: none;
+    box-shadow: none;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+@media (min-width: 1024px) {
+    .card {
+        padding: 40px 48px;
+        border-radius: 20px;
+        margin-bottom: 20px;
+    }
+    h2 {
+        font-size: 1.5rem !important;
+        margin-bottom: 18px !important;
+    }
+    p {
+        font-size: 0.95rem !important;
+    }
+    .input-group label {
+        font-size: 0.85rem !important;
+    }
+    .input-group input {
+        padding: 10px 14px !important;
+        font-size: 0.95rem !important;
+        border-radius: 8px !important;
+    }
+    .btn {
+        padding: 11px !important;
+        font-size: 0.95rem !important;
+        border-radius: 8px !important;
+        margin-top: 10px !important;
+    }
+}
+
+#settings-screen, 
+.settings-card,
+.screen#settings {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+h2 { 
+    margin-top: 0; 
+    font-size: 1.05rem; 
+    margin-bottom: 14px; 
+    font-weight: 700;
+    color: var(--text-color);
+    text-shadow: var(--text-shadow);
+}
+
+p {
+    font-size: 0.75rem; 
+    color: var(--text-color);
+    line-height: 1.4;
+    text-shadow: var(--text-shadow);
+}
+
+.input-group {
+    margin-bottom: 12px;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.68rem; 
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+    text-shadow: var(--text-shadow);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.4);
+    color: #ffffff;
+    box-sizing: border-box;
+    font-size: 0.75rem; 
+    font-family: 'Fredoka', sans-serif;
+    outline: none;
+}
+
+.input-group input::placeholder {
+    color: #b0b0b0;
+}
+
+.btn {
+    width: 100%;
+    padding: 7px;
+    background: var(--primary);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.75rem; 
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 6px;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s ease;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn:disabled, .btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(30%);
+    box-shadow: none;
+}
+
+.btn-secondary {
+    background: var(--secondary);
+    color: #ffffff;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: #ffffff;
+}
+
+.error-msg {
+    color: #ff8a80;
+    font-size: 0.68rem;
+    margin-top: 6px;
+    min-height: 14px;
+    font-weight: 600;
+    text-shadow: var(--text-shadow);
+}
+
+@media (min-width: 1024px) {
+    .error-msg {
+        font-size: 0.85rem !important;
+    }
+}
