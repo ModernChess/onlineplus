@@ -1,4 +1,4 @@
-// game-config.js - Configuration, Map Data Arrays, Terrain Parsers, and Local Asset Loaders (24x34 Grid System)
+// game-config.js - Configuration, Map Data Arrays, Terrain Parsers, and Local Asset Loaders (24x34 Grid System)[span_1](start_span)[span_1](end_span)
 
 export const cols = 24;
 export const rows = 34;
@@ -201,7 +201,6 @@ export function getTerrain(col, row) {
 export function spawnTeamUnits(team, unitsList) {
     let baseList = (team === 'blue') ? blueBasesList : redBasesList;
 
-    // Only spawn up to 2 units, and make sure both are Infantry units
     baseList.slice(0, 2).forEach((coordStr, index) => {
         let m = coordStr.match(/^([A-Z]+)(\d+)$/);
         if (m) {
