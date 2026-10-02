@@ -7,7 +7,8 @@ import {
     redBasesList, 
     blueBasesList, 
     teamNavySpawns,
-    artList 
+    artList,
+    navList 
 } from './game-config.js';
 import { tileCaptures, parseCoord } from './team-logic.js';
 import { getUnitAtCoordinate } from './game-renderer.js';
@@ -64,13 +65,12 @@ function toCoordSet(list) {
     return set;
 }
 
-const navyCoordList = teamNavySpawns.map(n => parseCoord(n.coordinates) || n.coordinates.trim());
 const baseAndCoreList = [...redBasesList, ...blueBasesList, ...bbcList, ...rbcList].map(i => parseCoord(i)).filter(Boolean);
 
 const deploymentRules = {
     infantry: new Set([...goldList.map(i => parseCoord(i)).filter(Boolean), ...baseAndCoreList]),
     tank: new Set(baseAndCoreList),
-    ship: toCoordSet(teamNavySpawns.map(n => n.coordinates)),
+    ship: toCoordSet(navList),
     plane: new Set(baseAndCoreList),
     engineer: new Set(baseAndCoreList),
     artillery: toCoordSet(artList),
@@ -101,11 +101,12 @@ export function isTileValidForTeam(coordKey, unitType, targetTeam) {
     };
 
     if (typeLower === 'ship') {
-        const navySpawn = teamNavySpawns.find(n => {
-            const parsedNav = parseCoord(n.coordinates);
-            return parsedNav === cleanCoordKey || n.coordinates.trim() === coordKey;
-        });
-        return navySpawn && navySpawn.team.toLowerCase() === targetTeam.toLowerCase();
+        // Must be in navList AND explicitly captured/owned by the team via tileCaptures
+        const isInNavList = navList.some(k => parseCoord(k) === cleanCoordKey || k.trim() === coordKey);
+        if (isInNavList) {
+            return isOwnedByTeam(tileInfo);
+        }
+        return false;
     }
 
     if (typeLower === 'tank' || typeLower === 'plane' || typeLower === 'engineer') {
@@ -241,7 +242,7 @@ export function spawnUnitDeployerPopup(unitType, units, logToConsole, playerTeam
         if (isTileValidForTeam(coordKey, unitType, targetTeam)) {
             let occupyingUnit = getUnitAtCoordinate(c, r);
             let tileInfo = tileCaptures[coordKey];
-            let displayTypeName = tileInfo ? tileInfo.type : (navyCoordList.includes(coordKey) ? 'nav' : (artList.some(a => parseCoord(a) === coordKey) ? 'artillery' : 'base'));
+            let displayTypeName = tileInfo ? tileInfo.type : (navList.some(n => parseCoord(n) === coordKey) ? 'port' : (artList.some(a => parseCoord(a) === coordKey) ? 'artillery' : 'base'));
 
             validRowsList.push({ 
                 col: c, 
@@ -386,7 +387,6 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     logToConsole(`Placed new unit ${newUnit.name} at coordinates [${clickedCol}, ${clickedRow}]`);
 
     if (currentMatchId) {
-        // FIXED: Target matches_plus instead of matches
         update(ref(db, `matches_plus/${currentMatchId}`), { 
             units: activeUnits,
             coins: coinsRefToUse 
