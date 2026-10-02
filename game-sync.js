@@ -11,7 +11,8 @@ let isInitialSync = true; // Tracks the first snapshot after connecting/reloadin
 
 export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logToConsole, onMatchEnded, onTurnChanged, tileCapturesRef = null) {
     if (!currentMatchId) return;
-    const matchRef = ref(db, `matches/${currentMatchId}`);
+    // FIXED: Target matches_plus instead of matches
+    const matchRef = ref(db, `matches_plus/${currentMatchId}`);
     
     onValue(matchRef, (snapshot) => {
         const match = snapshot.val();
@@ -148,7 +149,8 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
 
 export function listenToMatchChat(currentMatchId, currentUser) {
     if (!currentMatchId) return;
-    const chatRef = ref(db, `matches/${currentMatchId}/chat`);
+    // FIXED: Target matches_plus instead of matches
+    const chatRef = ref(db, `matches_plus/${currentMatchId}/chat`);
     
     const sendBtn = document.getElementById('chatSend');
     const inputEl = document.getElementById('chatInput');
