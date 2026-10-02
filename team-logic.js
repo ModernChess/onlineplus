@@ -1,16 +1,18 @@
-// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values (18x18 System)
+// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values
 import { 
     cols, 
     rows,
+    colLetterToIndex,
     goldList, 
     bbcList, 
     rbcList, 
     redBasesList, 
     blueBasesList,
-    teamNavySpawns 
+    navList,
+    artList,
+    tList
 } from './game-config.js';
 
-// Legacy exports for compatibility
 export const rbList = redBasesList;
 export const bbList = blueBasesList;
 
@@ -18,42 +20,82 @@ export let tileCaptures = {};
 
 export const goldCoreClusters = [
     {
-        gc: "6,4",
-        linked: ["5,4", "5,5", "6,5", "7,5", "7,4", "7,3", "6,3", "5,3"]
+        gc: "BB21",
+        linked: ["BA20", "BB20", "BA21", "BC21", "BA22", "BB22", "BC22"]
     },
     {
-        gc: "1,5",
-        linked: ["0,4", "1,4", "2,4", "2,5", "2,6", "1,6", "0,6", "0,5"]
+        gc: "BJ19",
+        linked: ["BI18", "BJ18", "BK18", "BI19", "BK19", "BI20", "BJ20", "BK20"]
     },
     {
-        gc: "5,14",
-        linked: ["5,15", "6,15", "6,14", "6,13", "5,13", "4,13", "4,14", "4,15"]
+        gc: "BO21",
+        linked: ["BN20", "BO20", "BP20", "BN21", "BP21", "BN22", "BO22", "BP22"]
     },
     {
-        gc: "11,16",
-        linked: ["11,17", "12,17", "12,16", "12,15", "11,15", "10,15", "10,16", "10,17"]
+        gc: "BU24",
+        linked: ["BT23", "BU23", "BV23", "BT24", "BV24", "BT25", "BU25", "BV25"]
     },
     {
-        gc: "16,12",
-        linked: ["15,12", "15,13", "16,13", "17,13", "17,12", "17,11", "16,11", "15,11"]
+        gc: "BP25",
+        linked: ["BO24", "BP24", "BQ24", "BQ25", "BP26", "BQ26"]
     },
     {
-        gc: "12,7",
-        linked: ["12,8", "13,8", "13,7", "13,6", "12,6", "11,6", "11,7"]
+        gc: "BT28",
+        linked: ["BS27", "BT27", "BU27", "BS28", "BU28", "BS29", "BT29", "BU29"]
+    },
+    {
+        gc: "BF32",
+        linked: ["BF31", "BG31", "BE32", "BG32", "BE33", "BF33", "BG33"]
+    },
+    {
+        gc: "BL34",
+        linked: ["BK33", "BL33", "BM33", "BK34", "BM34", "BK35", "BL35", "BM35"]
+    },
+    {
+        gc: "BP35",
+        linked: ["BP34", "BQ34", "BQ35", "BQ36"]
+    },
+    {
+        gc: "BK39",
+        linked: ["BJ38", "BK38", "BL38", "BJ39", "BL39", "BJ40", "BK40", "BL40"]
+    },
+    {
+        gc: "BE42",
+        linked: ["BD41", "BE41", "BF41", "BD42", "BF42", "BD43", "BE43", "BF43"]
+    },
+    {
+        gc: "BA49",
+        linked: ["BA48", "BB48", "AZ49", "BB49", "AZ50", "BA50", "BB50"]
     }
 ];
 
-// Coin reward mapping for capturing specific tile types
 export const tileCoinValues = {
     'gold': 0.5,
     'gold core': 2,
     'red base': 0.5,
     'blue base': 0.5,
-    'port': 0.5
+    'port': 0.5,
+    'artillery': 0.5,
+    'tank': 0.5
 };
 
 export function parseCoord(item) {
     if (typeof item !== 'string') return null;
+
+    let chessMatch = item.match(/^([A-Z]+)(\d+)$/);
+    if (chessMatch) {
+        let colStr = chessMatch[1];
+        let rowNum = parseInt(chessMatch[2], 10);
+        let rawIndex = colLetterToIndex(colStr);
+        if (rawIndex === undefined || rawIndex === null) return null;
+        
+        let correctedCol = rawIndex;
+        let rIdx = rowNum - 18; 
+        if (correctedCol < 0 || correctedCol >= cols || rIdx < 0 || rIdx >= rows) return null;
+
+        return `${correctedCol},${rIdx}`;
+    }
+
     let parts = item.split(',');
     if (parts.length !== 2) return null;
     
@@ -70,6 +112,7 @@ export function parseCoord(item) {
 export function initTileCaptures() {
     tileCaptures = {};
     const registerList = (list, typeName, defaultOwner = null) => {
+        if (!list) return;
         list.forEach(item => {
             let key = parseCoord(item);
             if (key) {
@@ -79,12 +122,14 @@ export function initTileCaptures() {
     };
 
     registerList(goldList, 'gold', null);
-    registerList(redBasesList, 'red base', 'red');       // Pre-captured by Red[span_0](start_span)[span_0](end_span)
-    registerList(blueBasesList, 'blue base', 'blue');    // Pre-captured by Blue[span_1](start_span)[span_1](end_span)
-    registerList(bbcList, 'blue base command', 'blue');  // Pre-captured by Blue[span_2](start_span)[span_2](end_span)
-    registerList(rbcList, 'red base command', 'red');    // Pre-captured by Red[span_3](start_span)[span_3](end_span)
+    registerList(redBasesList, 'red base', 'red');       
+    registerList(blueBasesList, 'blue base', 'blue');    
+    registerList(bbcList, 'blue base command', 'blue');  
+    registerList(rbcList, 'red base command', 'red');    
+    registerList(artList, 'artillery', null);            
+    registerList(tList, 'tank', null);            
+    registerList(navList, 'port', null);
 
-    // Register gold core clusters (GC gets 'gold core', linked tiles get 'gold core linked')
     goldCoreClusters.forEach(cluster => {
         let gcKey = parseCoord(cluster.gc);
         if (gcKey) {
@@ -96,14 +141,6 @@ export function initTileCaptures() {
                 tileCaptures[linkKey] = { type: 'gold core linked', gcCoord: gcKey, capturedBy: null };
             }
         });
-    });
-
-    // Register team navy spawns as ports/naval structures
-    teamNavySpawns.forEach(n => {
-        let key = parseCoord(n.coordinates);
-        if (key) {
-            tileCaptures[key] = { type: 'port', capturedBy: n.team };
-        }
     });
 }
 
