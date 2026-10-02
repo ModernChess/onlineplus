@@ -16,7 +16,7 @@ export function checkVictoryConditions(currentUnits, matchId, logger, isGameOver
     } else if (redUnits.length === 0 && blueUnits.length > 0) {
         setGameOver(true);
         logger(`VICTORY! All Red units have been destroyed! Blue team wins!`);
-        alert(`Game Over! Blue team won because all Blue units were destroyed!`);
+        alert(`Game Over! Blue team won because all Red units were destroyed!`);
         endGameSessionState(matchId, 'blue');
     }
 }
