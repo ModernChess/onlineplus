@@ -30,7 +30,7 @@ export function getUnitRange(unit) {
         return 3;
     }
     if (unit.name === 'Engineer' || unit.name === 'Mine') {
-        return 3;
+        return 1;
     }
     return 1;
 }
@@ -91,7 +91,6 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
 
     container.appendChild(btn);
 }
-
 export function getLegalMoves(unit, units) {
     if (!unit) return [];
     
@@ -140,7 +139,7 @@ export function getLegalMoves(unit, units) {
             if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) break;
 
             let terrain = getTerrain(nc, nr);
-            let tileIsWater = isWaterTerrain(nc, nr) || terrain === 'light_navy';
+            let tileIsWater = isWaterTerrain(nc, nr) || terrain === 'light_navy' || terrain === 'water';
 
             if (isLandOrTrap) {
                 let isBridged = bridgedWaterTiles.has(`${nc},${nr}`);
@@ -149,7 +148,8 @@ export function getLegalMoves(unit, units) {
                 }
             }
 
-            if (isNaval && terrain !== 'light_navy' && terrain !== 'naval') {
+            // FIX: Allow ships to move on standard water terrain as well as light_navy and naval types
+            if (isNaval && !tileIsWater && terrain !== 'naval' && terrain !== 'light_navy') {
                 break;
             }
 
@@ -162,6 +162,7 @@ export function getLegalMoves(unit, units) {
 
     return moves;
 }
+
 
 export function getEngineerRangeTiles(unit) {
     if (!unit || unit.name !== 'Engineer') return [];
