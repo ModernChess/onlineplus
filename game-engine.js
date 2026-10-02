@@ -1,3 +1,4 @@
+// game-engine.js - Game Loop and Core Cluster Capture Logic
 import { db, ref, update } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { cols, rows, spawnTeamUnits } from './game-config.js';
@@ -29,10 +30,9 @@ let teamCoins = { blue: 0, red: 0 };
 let hasInitializedState = false;
 let isGameOver = false;
 
-// Timer tracking variables
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
-const TURN_TIME_LIMIT_MS = 30000; // 30 seconds
+const TURN_TIME_LIMIT_MS = 30000;
 
 const logToConsole = createConsoleLogger();
 initTileCaptures();
@@ -82,13 +82,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
     ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, onLeaveCallback, logToConsole, () => updateTurnButtonState(currentTurn, playerTeam));
     
-    ensureBuyUnitsModal(
-        logToConsole, 
-        () => units, 
-        () => playerTeam, 
-        matchIdRef, 
-        () => updateGlobalCoinHUD(teamCoins)
-    );
+    ensureBuyUnitsModal(logToConsole, () => units, () => playerTeam, matchIdRef, () => updateGlobalCoinHUD(teamCoins));
 
     updateTurnButtonState(currentTurn, playerTeam);
     updateGlobalCoinHUD(teamCoins);
@@ -107,7 +101,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 logToConsole(`Turn changed to: ${turn}. Resetting turn timer.`);
                 movedUnitsThisTurn.clear();
                 units.forEach(u => u.hasMovedThisTurn = false);
-                turnStartTime = Date.now(); // Reset timer on turn sync
+                turnStartTime = Date.now();
             }
             
             currentTurn = turn;
@@ -164,7 +158,6 @@ function startTurnTimer(matchIdRef) {
         let timeLeftSec = Math.ceil((TURN_TIME_LIMIT_MS - elapsed) / 1000);
         updateTurnTimerDisplay(timeLeftSec);
 
-        // If the active player exceeds 30 seconds, automatically force turn change
         if (elapsed >= TURN_TIME_LIMIT_MS && currentTurn === playerTeam) {
             logToConsole(`Turn time limit (30s) reached! Automatically changing turn.`);
             movedUnitsThisTurn.clear();
@@ -346,17 +339,19 @@ function initCanvasGame() {
                         if (cluster) {
                             let gcKey = parseCoord(cluster.gc);
                             let gcTile = tileCaptures[gcKey];
+                            
                             if (gcTile && gcTile.capturedBy !== selectedUnit.team) {
                                 gcTile.capturedBy = selectedUnit.team;
-                                cluster.linked.forEach(l => {
-                                    let lKey = parseCoord(l);
-                                    if (tileCaptures[lKey]) {
-                                        tileCaptures[lKey].capturedBy = selectedUnit.team;
+
+                                cluster.linked.forEach(linkItem => {
+                                    let linkKey = parseCoord(linkItem);
+                                    if (linkKey && tileCaptures[linkKey]) {
+                                        tileCaptures[linkKey].capturedBy = selectedUnit.team;
                                     }
                                 });
 
                                 teamCoins[selectedUnit.team] = (teamCoins[selectedUnit.team] || 0) + 2;
-                                logToConsole(`${selectedUnit.team.toUpperCase()} captured Gold Core (+2 coins)! Total: ${teamCoins[selectedUnit.team]}`);
+                                logToConsole(`${selectedUnit.team.toUpperCase()} captured Gold Core cluster centrally (+2 coins)! Total: ${teamCoins[selectedUnit.team]}`);
                                 updateGlobalCoinHUD(teamCoins);
                             }
                         } else if (tileInfo.capturedBy !== selectedUnit.team) {
@@ -389,13 +384,14 @@ function initCanvasGame() {
                 let nextTurn = currentTurn;
                 let turnChanged = false;
 
-                if (movedUnitsThisTurn.size >= 1) {
+                // Updated threshold to 2 unit moves per turn
+                if (movedUnitsThisTurn.size >= 2) {
                     movedUnitsThisTurn.clear();
                     units.forEach(u => u.hasMovedThisTurn = false);
                     nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
                     currentTurn = nextTurn;
                     lastSeenTurn = nextTurn;
-                    turnStartTime = Date.now(); // Reset timer on turn change
+                    turnStartTime = Date.now();
                     turnChanged = true;
                     updateTurnButtonState(currentTurn, playerTeam);
                 }
