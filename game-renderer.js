@@ -323,27 +323,30 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
             unit.visualAngle += angleDiff * 0.35; 
         }
 
-        let unitImg = null;
+                let unitImg = null;
         let isLoaded = false;
+        let normalizedUnitName = (unit.name || '').toLowerCase().replace(/[\s-]/g, '');
+
         if (unit.team === 'blue') {
-            if (unit.name === 'Anti-Air') { unitImg = blueAntiairImg; isLoaded = blueAntiairLoaded; }
-            else if (unit.name === 'Artillery') { unitImg = blueArtilleryImg; isLoaded = blueArtilleryLoaded; }
-            else if (unit.name === 'Engineer') { unitImg = blueEngineerImg; isLoaded = blueEngineerLoaded; }
-            else if (unit.name === 'Infantry') { unitImg = blueInfantryImg; isLoaded = blueInfantryLoaded; }
-            else if (unit.name === 'Mine') { unitImg = blueMineImg; isLoaded = blueMineLoaded; }
-            else if (unit.name === 'Plane') { unitImg = bluePlaneImg; isLoaded = bluePlaneLoaded; }
-            else if (unit.name === 'Ship') { unitImg = blueShipImg; isLoaded = blueShipLoaded; }
-            else if (unit.name === 'Tank') { unitImg = blueTankImg; isLoaded = blueTankLoaded; }
+            if (normalizedUnitName === 'antiair') { unitImg = blueAntiairImg; isLoaded = blueAntiairLoaded; }
+            else if (normalizedUnitName === 'artillery') { unitImg = blueArtilleryImg; isLoaded = blueArtilleryLoaded; }
+            else if (normalizedUnitName === 'engineer') { unitImg = blueEngineerImg; isLoaded = blueEngineerLoaded; }
+            else if (normalizedUnitName === 'infantry') { unitImg = blueInfantryImg; isLoaded = blueInfantryLoaded; }
+            else if (normalizedUnitName === 'mine') { unitImg = blueMineImg; isLoaded = blueMineLoaded; }
+            else if (normalizedUnitName === 'plane') { unitImg = bluePlaneImg; isLoaded = bluePlaneLoaded; }
+            else if (normalizedUnitName === 'ship') { unitImg = blueShipImg; isLoaded = blueShipLoaded; }
+            else if (normalizedUnitName === 'tank') { unitImg = blueTankImg; isLoaded = blueTankLoaded; }
         } else {
-            if (unit.name === 'Anti-Air') { unitImg = redAntiairImg; isLoaded = redAntiairLoaded; }
-            else if (unit.name === 'Artillery') { unitImg = redArtilleryImg; isLoaded = redArtilleryLoaded; }
-            else if (unit.name === 'Engineer') { unitImg = redEngineerImg; isLoaded = redEngineerLoaded; }
-            else if (unit.name === 'Infantry') { unitImg = redInfantryImg; isLoaded = redInfantryLoaded; }
-            else if (unit.name === 'Mine') { unitImg = redMineImg; isLoaded = redMineLoaded; }
-            else if (unit.name === 'Plane') { unitImg = redPlaneImg; isLoaded = redPlaneLoaded; }
-            else if (unit.name === 'Ship') { unitImg = redShipImg; isLoaded = redShipLoaded; }
-            else if (unit.name === 'Tank') { unitImg = redTankImg; isLoaded = redTankLoaded; }
+            if (normalizedUnitName === 'antiair') { unitImg = redAntiairImg; isLoaded = redAntiairLoaded; }
+            else if (normalizedUnitName === 'artillery') { unitImg = redArtilleryImg; isLoaded = redArtilleryLoaded; }
+            else if (normalizedUnitName === 'engineer') { unitImg = redEngineerImg; isLoaded = redEngineerLoaded; }
+            else if (normalizedUnitName === 'infantry') { unitImg = redInfantryImg; isLoaded = redInfantryLoaded; }
+            else if (normalizedUnitName === 'mine') { unitImg = redMineImg; isLoaded = redMineLoaded; }
+            else if (normalizedUnitName === 'plane') { unitImg = redPlaneImg; isLoaded = redPlaneLoaded; }
+            else if (normalizedUnitName === 'ship') { unitImg = redShipImg; isLoaded = redShipLoaded; }
+            else if (normalizedUnitName === 'tank') { unitImg = redTankImg; isLoaded = redTankLoaded; }
         }
+
 
         let cellCenterX = unit.animX + targetPos.cellSize / 2;
         let cellCenterY = renderDrawY + targetPos.cellSize / 2;
