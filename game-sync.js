@@ -3,15 +3,17 @@ import { db, ref, update, onValue, push } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { triggerMoveSound } from './sound.js';
 import { updateTurnStatusBanner } from './game-controls.js';
+import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
+import { getRenderCoordinates } from './game-renderer.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
+let lastProcessedDestructionTime = 0; 
 let lastServerTurn = null;
-let isInitialSync = true; // Tracks the first snapshot after connecting/reloading
+let isInitialSync = true; 
 
 export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logToConsole, onMatchEnded, onTurnChanged, tileCapturesRef = null) {
     if (!currentMatchId) return;
-    // FIXED: Target matches_plus instead of matches
     const matchRef = ref(db, `matches_plus/${currentMatchId}`);
     
     onValue(matchRef, (snapshot) => {
@@ -19,8 +21,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         if (!match) return;
         
         const isMyTurn = match.turn === playerTeam;
-        
-        // Only trigger a true turn change if it's NOT the initial connection/reload sync
         const serverTurnChanged = !isInitialSync && match.turn && match.turn !== lastServerTurn;
         
         if (match.turn) {
@@ -39,16 +39,47 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                 }
             }
         }
+
+        // Listen for remote destruction events safely and prevent duplicate triggers
+        if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedDestructionTime) {
+            const destTime = match.lastDestructions.timestamp;
+            lastProcessedDestructionTime = destTime; // Always mark as processed immediately
+
+            if (match.lastAction && match.lastAction.team !== playerTeam) {
+                if (match.lastDestructions.events && Array.isArray(match.lastDestructions.events)) {
+                    match.lastDestructions.events.forEach(dest => {
+                        const canvas = document.getElementById('gameCanvas');
+                        if (canvas) {
+                            if (dest.isFarAttack) {
+                                triggerFarDestructionTrails(
+                                    dest.attackerX, 
+                                    dest.attackerY, 
+                                    dest.targetX, 
+                                    dest.targetY, 
+                                    getRenderCoordinates, 
+                                    canvas, 
+                                    playerTeam
+                                );
+                            } else {
+                                triggerFrontalExplosion(
+                                    dest.targetX, 
+                                    dest.targetY, 
+                                    getRenderCoordinates, 
+                                    canvas, 
+                                    playerTeam
+                                );
+                            }
+                        }
+                    });
+                }
+            }
+        }
         
-        // Synchronize tile captures and handle remote updates securely
         if (match.tileCaptures && tileCapturesRef) {
             Object.keys(match.tileCaptures).forEach(key => {
                 let remoteTile = match.tileCaptures[key];
                 if (tileCapturesRef[key]) {
-                    let oldOwner = tileCapturesRef[key].capturedBy;
                     let newOwner = (remoteTile && remoteTile.capturedBy != null) ? remoteTile.capturedBy : null;
-                    
-                    // Update ownership value locally so renderer detects the shift and handles animations cleanly
                     tileCapturesRef[key].capturedBy = newOwner;
                 } else if (remoteTile) {
                     tileCapturesRef[key] = {
@@ -106,7 +137,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             });
         }
         
-        // Initial sync handshake is complete after processing the first snapshot
         isInitialSync = false;
         
         let myUserName = playerTeam === 'blue' ? (match.blueUser || 'Blue Player') : (match.redUser || 'Red Player');
@@ -125,11 +155,9 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                 }, 4000);
             }
         } else {
-            // Feed active player name directly into the sleek top HUD banner
             let activePlayerName = isMyTurn ? myUserName : opponentName;
             updateTurnStatusBanner(match.turn, activePlayerName);
 
-            // Keep the VS container clean and focused on user match cards
             let bannerHTML = `
                 <div class="battle-vs-container">
                     <div class="battle-vs-box">
@@ -149,7 +177,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
 
 export function listenToMatchChat(currentMatchId, currentUser) {
     if (!currentMatchId) return;
-    // FIXED: Target matches_plus instead of matches
     const chatRef = ref(db, `matches_plus/${currentMatchId}/chat`);
     
     const sendBtn = document.getElementById('chatSend');
