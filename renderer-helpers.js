@@ -1,9 +1,10 @@
-// renderer-helpers.js - Helper modules with local repoBaseUrl and sound11burningcity.mp3 asset configuration
+// renderer-helpers.js - Helper modules with local repoBaseUrl, sound effects, and combat animation rendering
 import { 
     cols, rows, 
     colLetterToIndex, goldCoreList, goldList, artList, tList, rbList, bbList, navList, bbcList, rbcList 
 } from './game-config.js';
 import { getPendingUnitType, isTileValidForTeam } from './deployment.js';
+import { triggerFrontalAttackSound, triggerRangedAttackSound } from './sound.js';
 
 let smokeParticles = [];
 let tileFlagAnimations = new Map();
@@ -11,52 +12,50 @@ let tileFireTimestamps = new Map();
 let previousTileCapturesState = {};
 let capturesInitialized = false; 
 
-// Local constant asset repository base URL with updated burning city audio asset
+// Active combat animation arrays
+let activeExplosions = [];
+let activeProjectiles = [];
+
+// Local constant asset repository base URL
 const repoBaseUrl = 'https://raw.githubusercontent.com/ModernChess/assets-images/main/';
-const fireAudio = new Audio(repoBaseUrl + 'sound11burningcity.mp3');
-fireAudio.loop = false;
 
-const fireAudioConfig = {
-    startTime: 0,          
-    endTime: 5.0,            
-    maxVolume: 0.2,          
-    fadeInDuration: 0,     
-    fadeOutDuration: 0.5     
-};
+// Independent audio player for burning tiles so multiple fires never conflict or cut each other off
+function playFireAudioEffect() {
+    const audio = new Audio(repoBaseUrl + 'sound11burningcity.mp3');
+    audio.preload = 'auto';
+    audio.currentTime = 0;
+    audio.volume = 0;
 
-function processAudioEffect(audioElement, fireElapsed, config) {
-    let audioElapsed = fireElapsed / 1000;
-    
-    if (audioElapsed >= config.startTime && audioElapsed <= config.endTime) {
-        let currentVol = config.maxVolume;
-        let fadeInEnd = config.startTime + config.fadeInDuration;
-        let fadeOutStart = config.endTime - config.fadeOutDuration;
+    const startTime = 0;
+    const endTime = 5.0;
+    const maxVolume = 0.2;
+    const fadeOutDuration = 0.5;
 
-        if (audioElapsed < fadeInEnd) {
-            let progress = (audioElapsed - config.startTime) / config.fadeInDuration;
-            currentVol = progress * config.maxVolume;
-        } else if (audioElapsed > fadeOutStart) {
-            let progress = (config.endTime - audioElapsed) / config.fadeOutDuration;
-            currentVol = progress * config.maxVolume;
+    const checkInterval = setInterval(() => {
+        let currentTime = audio.currentTime;
+
+        if (currentTime >= startTime && currentTime <= endTime) {
+            let currentVol = maxVolume;
+            let fadeOutStart = endTime - fadeOutDuration;
+
+            if (currentTime > fadeOutStart && currentTime < endTime) {
+                let progress = (endTime - currentTime) / fadeOutDuration;
+                currentVol = maxVolume * progress;
+            }
+
+            audio.volume = Math.max(0, Math.min(maxVolume, currentVol));
         }
 
-        audioElement.volume = Math.max(0, Math.min(config.maxVolume, currentVol));
-    } else if (audioElapsed > config.endTime) {
-        audioElement.pause();
-    }
-}
-
-function toCoordSet(list) {
-    const set = new Set();
-    list.forEach(item => {
-        if (typeof item === 'string' && item.includes(',')) {
-            set.add(item.trim());
-        } else {
-            let m = item.match(/^([A-Z]+)(\d+)$/);
-            if (m) set.add(`${colLetterToIndex(m[1])},${parseInt(m[2], 10) - 18}`);
+        if (currentTime >= endTime || audio.paused) {
+            audio.pause();
+            clearInterval(checkInterval);
         }
+    }, 50);
+
+    audio.play().catch(err => {
+        clearInterval(checkInterval);
+        console.log("Audio autoplay restricted:", err);
     });
-    return set;
 }
 
 export const unitColors = {
@@ -120,12 +119,161 @@ export function drawSmokeParticles(ctx) {
     ctx.restore();
 }
 
+export function triggerFrontalExplosion(gridX, gridY, getRenderCoordinatesFunc, canvas, localTeam) {
+    triggerFrontalAttackSound(); // Play tank.mp3
+    let pos = getRenderCoordinatesFunc(gridX, gridY, canvas.width, localTeam);
+    let centerX = pos.x + pos.cellSize / 2;
+    let centerY = pos.y + pos.cellSize / 2;
+
+    activeExplosions.push({
+        x: centerX,
+        y: centerY,
+        cellSize: pos.cellSize,
+        startTime: performance.now(),
+        duration: 600,
+        type: 'frontal',
+        particles: createExplosionParticles(centerX, centerY, pos.cellSize)
+    });
+}
+
+export function triggerFarDestructionTrails(attackerX, attackerY, targetX, targetY, getRenderCoordinatesFunc, canvas, localTeam) {
+    triggerRangedAttackSound(); // Play artillery.mp3
+    let startPos = getRenderCoordinatesFunc(attackerX, attackerY, canvas.width, localTeam);
+    let endPos = getRenderCoordinatesFunc(targetX, targetY, canvas.width, localTeam);
+
+    let startX = startPos.x + startPos.cellSize / 2;
+    let startY = startPos.y + startPos.cellSize / 2;
+    let targetXCenter = endPos.x + endPos.cellSize / 2;
+    let targetYCenter = endPos.y + endPos.cellSize / 2;
+
+    for (let i = 0; i < 3; i++) {
+        activeProjectiles.push({
+            startX: startX + (Math.random() - 0.5) * 4,
+            startY: startY + (Math.random() - 0.5) * 4,
+            targetX: targetXCenter + (Math.random() - 0.5) * 10,
+            targetY: targetYCenter + (Math.random() - 0.5) * 10,
+            startTime: performance.now() + (i * 80),
+            duration: 450,
+            cellSize: endPos.cellSize,
+            gridX: targetX,
+            gridY: targetY
+        });
+    }
+}
+
+function createExplosionParticles(x, y, cellSize) {
+    let particles = [];
+    let count = 24;
+    for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = (Math.random() * 3 + 1) * (cellSize / 30);
+        let colors = ['#e74c3c', '#e67e22', '#f1c40f', '#ffffff', '#333333'];
+        
+        particles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: Math.random() * (cellSize * 0.15) + 2,
+            color: colors[Math.floor(Math.random() * colors.length)]
+        });
+    }
+    return particles;
+}
+
+export function drawCombatAnimations(ctx, canvas) {
+    let now = performance.now();
+
+    ctx.save();
+    for (let i = activeProjectiles.length - 1; i >= 0; i--) {
+        let p = activeProjectiles[i];
+        let elapsed = now - p.startTime;
+
+        if (elapsed < 0) continue;
+
+        let progress = elapsed / p.duration;
+        if (progress >= 1.0) {
+            activeExplosions.push({
+                x: p.targetX,
+                y: p.targetY,
+                cellSize: p.cellSize,
+                startTime: now,
+                duration: 600,
+                type: 'realistic',
+                particles: createExplosionParticles(p.targetX, p.targetY, p.cellSize)
+            });
+            activeProjectiles.splice(i, 1);
+            continue;
+        }
+
+        let currX = p.startX + (p.targetX - p.startX) * progress;
+        let currY = p.startY + (p.targetY - p.startY) * progress;
+        let heightArc = Math.sin(progress * Math.PI) * (p.cellSize * 1.5);
+        currY -= heightArc;
+
+        let scaleFactor = 0.4 + 2.6 * Math.sin(progress * Math.PI);
+        let currentRadius = 1.5 * scaleFactor;
+
+        ctx.strokeStyle = 'rgba(243, 156, 18, 0.7)';
+        ctx.lineWidth = Math.max(1, 2.0 * scaleFactor);
+        ctx.beginPath();
+        ctx.moveTo(p.startX, p.startY);
+        ctx.lineTo(currX, currY);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#f1c40f';
+        ctx.shadowBlur = 8 * scaleFactor;
+        ctx.beginPath();
+        ctx.arc(currX, currY, currentRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+
+    ctx.save();
+    for (let i = activeExplosions.length - 1; i >= 0; i--) {
+        let ex = activeExplosions[i];
+        let elapsed = now - ex.startTime;
+        let progress = elapsed / ex.duration;
+
+        if (progress >= 1.0) {
+            activeExplosions.splice(i, 1);
+            continue;
+        }
+
+        let alpha = 1.0 - progress;
+        ctx.globalAlpha = alpha;
+
+        let shockwaveRadius = (ex.cellSize * 1.2) * progress;
+        ctx.strokeStyle = `rgba(231, 76, 60, ${1 - progress})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ex.x, ex.y, shockwaveRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (ex.particles) {
+            ex.particles.forEach(pt => {
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.vx *= 0.92;
+                pt.vy *= 0.92;
+                
+                ctx.fillStyle = pt.color;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, Math.max(0.5, pt.radius * (1 - progress)), 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+    }
+    ctx.restore();
+}
+
 export function drawCapturedTileBadges(ctx, canvas, tileCaptures, getRenderCoordinatesFunc, localTeam) {
     if (!tileCaptures) return;
     ctx.save();
     for (let key in tileCaptures) {
         let tileInfo = tileCaptures[key];
-        // Only draw badges for captured tiles, skipping 'gold core linked' so only GC shows badges
         if (tileInfo && tileInfo.capturedBy && tileInfo.type !== 'gold core linked') {
             let parts = key.split(',');
             if (parts.length === 2) {
@@ -176,7 +324,6 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
 
     for (let key in tileCaptures) {
         let tileInfo = tileCaptures[key];
-        // Skip linked tiles so flag animations trigger solely on the central GC
         if (tileInfo && tileInfo.capturedBy && tileInfo.type !== 'gold core linked') {
             let prevTile = previousTileCapturesState[key];
             if (!prevTile || prevTile.capturedBy !== tileInfo.capturedBy) {
@@ -232,9 +379,8 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
             tileFlagAnimations.delete(key);
             tileFireTimestamps.set(key, now);
             
-            fireAudio.currentTime = fireAudioConfig.startTime;
-            fireAudio.volume = 0;
-            fireAudio.play().catch(err => console.log("Audio autoplay restricted:", err));
+            // Trigger dedicated independent audio instance for this specific fire
+            playFireAudioEffect();
         }
     }
 
@@ -247,8 +393,6 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
 
         let fireElapsed = now - fireStartTime;
         let fireDuration = 5000;
-
-        processAudioEffect(fireAudio, fireElapsed, fireAudioConfig);
 
         if (fireElapsed < fireDuration) {
             let parts = key.split(',');
@@ -292,7 +436,7 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
                 ctx.moveTo(cx - cellSize * 0.2, cy + cellSize * 0.2);
                 ctx.quadraticCurveTo(cx - cellSize * 0.25, cy - cellSize * 0.2, cx - cellSize * 0.05, cy - cellSize * 0.85 + pulse);
                 ctx.quadraticCurveTo(cx, cy - cellSize * 0.95 + pulse, cx + cellSize * 0.05, cy - cellSize * 0.85 + pulse);
-                ctx.quadraticCurveTo(cx + cellSize * 0.25, cy - cellSize * 0.2, cx + cellSize * 0.2, cy + cellSize * 0.2);
+                ctx.quadraticCurveTo(cx + cellSize * 0.25, cy - cellSize * 0.2, cx +cellSize * 0.2, cy + cellSize * 0.2);
                 ctx.closePath();
                 ctx.fill();
 
@@ -320,7 +464,6 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
             }
         } else {
             tileFireTimestamps.delete(key);
-            fireAudio.pause();
         }
     }
 
