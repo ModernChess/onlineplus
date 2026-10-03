@@ -32,6 +32,7 @@ let isGameOver = false;
 
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
+let coinIncomeInterval = null;
 const TURN_TIME_LIMIT_MS = 30000;
 
 const logToConsole = createConsoleLogger();
@@ -61,6 +62,27 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     document.getElementById('playerTeamBadge').innerText = `Team: ${playerTeam.toUpperCase()}`;
     document.getElementById('statusBanner').innerText = "Match started! 30s turn timer active.";
     logToConsole(`Starting game session as team: ${playerTeam}`);
+
+    // --- REALTIME PASSIVE COIN INCOME (+0.1 every 2 seconds) ---
+    if (coinIncomeInterval) clearInterval(coinIncomeInterval);
+    coinIncomeInterval = setInterval(() => {
+        if (isGameOver) return;
+
+        // Increment both teams' coins by 0.1 (use toFixed to avoid floating point precision quirks like 0.30000000000000004)
+        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.1).toFixed(1));
+        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.1).toFixed(1));
+
+        // Update the screen HUD
+        updateGlobalCoinHUD(teamCoins);
+
+        // Sync to Firebase if connected
+        if (currentMatchId) {
+            update(ref(db, `matches_plus/${currentMatchId}`), { 
+                coins: teamCoins 
+            });
+        }
+    }, 2000);
+    // -----------------------------------------------------------
 
     if (units.length === 0) {
         spawnTeamUnits('blue', units);
@@ -93,6 +115,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
         () => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             if (turnTimerInterval) clearInterval(turnTimerInterval);
+            if (coinIncomeInterval) clearInterval(coinIncomeInterval); // Clear income interval on leave/cleanup
         },
         (turn, remoteData) => {
             const turnChanged = (turn !== currentTurn || turn !== lastSeenTurn);
@@ -385,7 +408,7 @@ function initCanvasGame() {
                 let turnChanged = false;
 
                 // Updated threshold to 2 unit moves per turn
-                if (movedUnitsThisTurn.size >= 2) {
+                if (movedUnitsThisTurn.size >= 1) {
                     movedUnitsThisTurn.clear();
                     units.forEach(u => u.hasMovedThisTurn = false);
                     nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
@@ -396,7 +419,7 @@ function initCanvasGame() {
                     updateTurnButtonState(currentTurn, playerTeam);
                 }
 
-                if (currentMatchId) {
+                   if (currentMatchId) {
                     let sanitizedTileCaptures = {};
                     Object.keys(tileCaptures).forEach(k => {
                         sanitizedTileCaptures[k] = {
