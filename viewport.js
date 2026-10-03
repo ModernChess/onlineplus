@@ -1,9 +1,15 @@
-// viewport.js - Handles Camera Transformations, Panning, and Zooming Controls with Advanced Pinch & Capture Support
+// viewport.js - Handles Camera Transformations, Panning, and Zooming Controls with Drag Threshold and Smooth Dynamic Wheel Zooming
 let cameraZoom = 1.0;
 let cameraX = 0;
 let cameraY = 0;
 let isDragging = false;
 let panSensitivity = 1;
+
+// Track pointer down coordinates and movement threshold for smooth trackpad clicking
+let pointerDownX = 0;
+let pointerDownY = 0;
+let hasExceededThreshold = false;
+const DRAG_THRESHOLD = 6; // pixels of movement required before panning starts
 
 const activePointers = new Map();
 let initialPinchDistance = null;
@@ -23,6 +29,7 @@ export function resetCamera() {
     cameraX = 0;
     cameraY = 0;
     isDragging = false;
+    hasExceededThreshold = false;
     activePointers.clear();
     initialPinchDistance = null;
 }
@@ -49,10 +56,14 @@ export function initViewportControls(canvas, onTransformUpdate) {
         activePointers.set(e.pointerId, e);
         
         if (activePointers.size === 1) {
-            isDragging = true;
+            pointerDownX = e.clientX;
+            pointerDownY = e.clientY;
+            hasExceededThreshold = false;
+            isDragging = false; // Prevent accidental immediate panning on click
             initialPinchDistance = null;
         } else if (activePointers.size === 2) {
             isDragging = false;
+            hasExceededThreshold = true;
             const pointers = Array.from(activePointers.values());
             const rect = canvas.getBoundingClientRect();
             initialPinchDistance = getPinchDistance(pointers[0], pointers[1]);
@@ -76,11 +87,27 @@ export function initViewportControls(canvas, onTransformUpdate) {
             cameraX = currentCenter.x - (currentCenter.x - cameraX) * (newZoom / cameraZoom);
             cameraY = currentCenter.y - (currentCenter.y - cameraY) * (newZoom / cameraZoom);
             cameraZoom = newZoom;
-        } else if (isDragging && activePointers.size === 1) {
-            cameraX += e.movementX * panSensitivity;
-            cameraY += e.movementY * panSensitivity;
+        } else if (activePointers.size === 1) {
+            if (!hasExceededThreshold) {
+                const dx = e.clientX - pointerDownX;
+                const dy = e.clientY - pointerDownY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > DRAG_THRESHOLD) {
+                    hasExceededThreshold = true;
+                    isDragging = true;
+                }
+            }
+
+            if (isDragging) {
+                cameraX += e.movementX * panSensitivity;
+                cameraY += e.movementY * panSensitivity;
+            }
         }
-        if (onTransformUpdate) onTransformUpdate();
+        
+        if (onTransformUpdate && (isDragging || activePointers.size === 2)) {
+            onTransformUpdate();
+        }
     });
 
     const removePointer = (e) => {
@@ -94,33 +121,37 @@ export function initViewportControls(canvas, onTransformUpdate) {
             const remainingPointer = Array.from(activePointers.values())[0];
             activePointers.set(remainingPointer.pointerId, remainingPointer);
             initialPinchDistance = null;
-            isDragging = true;
+            pointerDownX = remainingPointer.clientX;
+            pointerDownY = remainingPointer.clientY;
+            hasExceededThreshold = false;
+            isDragging = false;
         } else if (activePointers.size < 2) {
             initialPinchDistance = null;
         }
 
         if (activePointers.size === 0) {
             isDragging = false;
+            hasExceededThreshold = false;
         }
     };
 
     canvas.addEventListener('pointerup', removePointer);
     canvas.addEventListener('pointercancel', removePointer);
 
+    // Enhanced smooth, dynamic exponential mouse wheel zoom anchored precisely to cursor position
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        let zoomIntensity = 0.1;
-        let newZoom = cameraZoom;
-        if (e.deltaY < 0) {
-            newZoom = Math.min(cameraZoom * (1 + zoomIntensity), 4.0);
-        } else {
-            newZoom = Math.max(cameraZoom * (1 - zoomIntensity), 0.5);
-        }
+        // Use exponential scaling for smoother, more organic step progression
+        const zoomIntensity = 0.12;
+        let scaleMultiplier = e.deltaY < 0 ? (1 + zoomIntensity) : (1 - zoomIntensity);
+        
+        let newZoom = Math.min(Math.max(cameraZoom * scaleMultiplier, 0.5), 4.0);
 
+        // Adjust camera offset to keep the world point beneath the cursor fixed
         cameraX = mouseX - (mouseX - cameraX) * (newZoom / cameraZoom);
         cameraY = mouseY - (mouseY - cameraY) * (newZoom / cameraZoom);
         cameraZoom = newZoom;
