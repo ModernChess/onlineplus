@@ -15,7 +15,7 @@ import { applyCameraTransform } from './viewport.js';
 import { getUnitRange, getShowUnitRange, getEngineerRangeTiles } from './unit-movement.js';
 import { getSuperunitsForTeam, getUnitMacroRangeTiles, stalematedUnits } from './combat-mechanics.js';
 import { tileCaptures } from './team-logic.js';
-import { spawnSmokeTrail, drawSmokeParticles, drawCapturedTileBadges, drawCapturedTileFireAndSmoke, drawDeploymentOverlay } from './renderer-helpers.js';
+import { spawnSmokeTrail, drawSmokeParticles, drawCapturedTileBadges, drawCapturedTileFireAndSmoke, drawDeploymentOverlay, drawCombatAnimations } from './renderer-helpers.js';
 
 let superunitBadgeCache = new Map();
 let cachedUnitsForDeployment = [];
@@ -56,9 +56,6 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
     let boardWidth = canvas.width;
     let boardHeight = boardWidth * (rows / cols);
 
-    // FIX: Safely isolate the map background rotation so only the map image 
-    // is visually flipped 180° for the Red team, leaving the world coordinate 
-    // space for units and clicks perfectly aligned and easy to interact with.
     ctx.save();
     if (localTeam === 'red') {
         ctx.translate(boardWidth / 2, boardHeight / 2);
@@ -70,17 +67,13 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
     }
     ctx.restore();
 
-    // Render captured tile team badges using helpers
     drawCapturedTileBadges(ctx, canvas, tileCaptures, getRenderCoordinates, localTeam);
-
-    // Render captured tile fire and smoke visual animation system
     drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRenderCoordinates, localTeam);
-
-    // Smoke particle animation loop using helpers
     drawSmokeParticles(ctx);
-
-    // Deployment placement highlights using helpers
     drawDeploymentOverlay(ctx, canvas, tileCaptures, units, getRenderCoordinates, localTeam);
+
+    // Render active combat explosion and projectile trail effects
+    drawCombatAnimations(ctx, canvas);
 
     if (selectedUnit && legalMoves && legalMoves.length > 0) {
         ctx.save();
@@ -323,7 +316,7 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
             unit.visualAngle += angleDiff * 0.35; 
         }
 
-                let unitImg = null;
+        let unitImg = null;
         let isLoaded = false;
         let normalizedUnitName = (unit.name || '').toLowerCase().replace(/[\s-]/g, '');
 
@@ -346,7 +339,6 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
             else if (normalizedUnitName === 'ship') { unitImg = redShipImg; isLoaded = redShipLoaded; }
             else if (normalizedUnitName === 'tank') { unitImg = redTankImg; isLoaded = redTankLoaded; }
         }
-
 
         let cellCenterX = unit.animX + targetPos.cellSize / 2;
         let cellCenterY = renderDrawY + targetPos.cellSize / 2;
