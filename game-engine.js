@@ -67,8 +67,8 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     coinIncomeInterval = setInterval(() => {
         if (isGameOver) return;
 
-        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.1).toFixed(1));
-        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.1).toFixed(1));
+        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.05).toFixed(1));
+        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.05).toFixed(1));
 
         updateGlobalCoinHUD(teamCoins);
 
@@ -77,7 +77,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 coins: teamCoins 
             });
         }
-    }, 2000);
+    }, 5000);
 
     if (units.length === 0) {
         spawnTeamUnits('blue', units);
