@@ -33,7 +33,7 @@ let isGameOver = false;
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
 let coinIncomeInterval = null;
-const TURN_TIME_LIMIT_MS = 30000;
+const TURN_TIME_LIMIT_MS = 60000;
 
 const logToConsole = createConsoleLogger();
 initTileCaptures();
