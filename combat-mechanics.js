@@ -234,13 +234,13 @@ export function resolveCombat(unitsList, logCallback) {
             let enemy = unitsList.find(u => u.gridX === tile.c && u.gridY === tile.r && u.team !== artillery.team);
             if (enemy && artilleryVulnerableUnits.has(enemy.name)) {
                 if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
-                    let success = Math.random() < 0.5;
+                    let success = Math.random() < 0.25;
                     if (success) {
                         destroyedIds.add(enemy.id);
                         unitsToDestroy.push({ 
                             unit: enemy, destroyedBy: 'Artillery',
                             attackerX: artillery.gridX, attackerY: artillery.gridY,
-                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (50% roll passed)` 
+                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (25% roll passed)` 
                         });
                         if (logCallback) {
                             logCallback(`Combat! Artillery (${artillery.team}) scored a direct hit and destroyed enemy ${enemy.name} (${enemy.team})!`);
