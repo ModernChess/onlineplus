@@ -1,22 +1,19 @@
-// game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes
-import { db, ref, update, onValue, push } from './network.js';
+// game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes (OnlinePlus Version)
+import { db, ref, update, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { triggerMoveSound } from './sound.js';
 import { updateTurnStatusBanner } from './game-controls.js';
-import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
-import { getRenderCoordinates } from './game-renderer.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
-let lastProcessedDestructionTime = 0; 
 let lastServerTurn = null;
 let isInitialSync = true; 
 
 export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logToConsole, onMatchEnded, onTurnChanged, tileCapturesRef = null) {
-    if (!currentMatchId) return;
+    if (!currentMatchId) return null;
     const matchRef = ref(db, `matches_plus/${currentMatchId}`);
     
-    onValue(matchRef, (snapshot) => {
+    const unsubscribe = onValue(matchRef, (snapshot) => {
         const match = snapshot.val();
         if (!match) return;
         
@@ -36,41 +33,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             if (match.lastAction.team !== playerTeam) {
                 if (match.lastAction.type === 'MOVE') {
                     triggerMoveSound(match.lastAction.unitName);
-                }
-            }
-        }
-
-        // Listen for remote destruction events safely and prevent duplicate triggers
-        if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedDestructionTime) {
-            const destTime = match.lastDestructions.timestamp;
-            lastProcessedDestructionTime = destTime; // Always mark as processed immediately
-
-            if (match.lastAction && match.lastAction.team !== playerTeam) {
-                if (match.lastDestructions.events && Array.isArray(match.lastDestructions.events)) {
-                    match.lastDestructions.events.forEach(dest => {
-                        const canvas = document.getElementById('gameCanvas');
-                        if (canvas) {
-                            if (dest.isFarAttack) {
-                                triggerFarDestructionTrails(
-                                    dest.attackerX, 
-                                    dest.attackerY, 
-                                    dest.targetX, 
-                                    dest.targetY, 
-                                    getRenderCoordinates, 
-                                    canvas, 
-                                    playerTeam
-                                );
-                            } else {
-                                triggerFrontalExplosion(
-                                    dest.targetX, 
-                                    dest.targetY, 
-                                    getRenderCoordinates, 
-                                    canvas, 
-                                    playerTeam
-                                );
-                            }
-                        }
-                    });
                 }
             }
         }
@@ -139,19 +101,22 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         isInitialSync = false;
         
-        let myUserName = playerTeam === 'blue' ? (match.blueUser || 'Blue Player') : (match.redUser || 'Red Player');
+        let myUserName = playerTeam === 'blue' ? (match.blueUser || 'Blue Player') : (match.redUser || 'Opponent');
         let opponentName = playerTeam === 'blue' ? (match.redUser || 'Opponent') : (match.blueUser || 'Opponent');
         let opponentIsAfk = playerTeam === 'blue' ? match.redAfk : match.redAfk;
 
         const banner = document.getElementById('statusBanner');
         if (match.status === 'ended') {
-            banner.innerHTML = `<div style="background: #2c3e50; color: #f1c40f; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center;">Match Ended! Winner: ${match.winner ? match.winner.toUpperCase() : 'Draw'}</div>`;
+            if (banner) {
+                banner.innerHTML = `<div style="background: #2c3e50; color: #f1c40f; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center;">Match Ended! Winner: ${match.winner ? match.winner.toUpperCase() : 'Draw'}</div>`;
+            }
             logToConsole(`Match ended. Winner: ${match.winner}. Returning to lobby in 4 seconds...`);
             
             if (!matchEndTimeout) {
                 matchEndTimeout = setTimeout(() => {
                     if (onMatchEnded) onMatchEnded();
                     showScreen('lobby-screen');
+                    matchEndTimeout = null; // <-- CRITICAL FIX: Reset timeout reference for subsequent matches
                 }, 4000);
             }
         } else {
@@ -170,9 +135,19 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             if (opponentIsAfk) {
                 bannerHTML += `<div style="color: #e74c3c; font-weight: bold; margin-top: 4px; font-size: 11px;">[${opponentName} has gone AFK. They can rejoin once they get into the app again!]</div>`;
             }
-            banner.innerHTML = bannerHTML;
+            if (banner) {
+                banner.innerHTML = bannerHTML;
+            }
         }
     });
+
+    return () => {
+        off(matchRef);
+        if (matchEndTimeout) {
+            clearTimeout(matchEndTimeout);
+            matchEndTimeout = null;
+        }
+    };
 }
 
 export function listenToMatchChat(currentMatchId, currentUser) {
