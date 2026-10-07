@@ -226,7 +226,7 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 3. Artillery Ranged Combat Resolution (50% Randomized Success Rate)
+    // 3. Artillery Ranged Combat Resolution (19% Randomized Success Rate)
     let artilleries = unitsList.filter(u => u.name === 'Artillery');
     artilleries.forEach(artillery => {
         let rangeTiles = getUnitMacroRangeTiles(artillery);
@@ -234,20 +234,20 @@ export function resolveCombat(unitsList, logCallback) {
             let enemy = unitsList.find(u => u.gridX === tile.c && u.gridY === tile.r && u.team !== artillery.team);
             if (enemy && artilleryVulnerableUnits.has(enemy.name)) {
                 if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
-                    let success = Math.random() < 0.25;
+                    let success = Math.random() < 0.19;
                     if (success) {
                         destroyedIds.add(enemy.id);
                         unitsToDestroy.push({ 
                             unit: enemy, destroyedBy: 'Artillery',
                             attackerX: artillery.gridX, attackerY: artillery.gridY,
-                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (25% roll passed)` 
+                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (19% roll passed)` 
                         });
                         if (logCallback) {
                             logCallback(`Combat! Artillery (${artillery.team}) scored a direct hit and destroyed enemy ${enemy.name} (${enemy.team})!`);
                         }
                     } else {
                         if (logCallback) {
-                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 50% roll)!`);
+                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 19% roll)!`);
                         }
                     }
                 }
