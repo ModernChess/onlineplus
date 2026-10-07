@@ -247,7 +247,7 @@ export function resolveCombat(unitsList, logCallback) {
                         }
                     } else {
                         if (logCallback) {
-                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 19% roll)!`);
+                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 23% roll)!`);
                         }
                     }
                 }
