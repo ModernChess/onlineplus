@@ -1,4 +1,4 @@
-// game-engine.js - Game Loop and Core Cluster Capture Logic
+// game-engine.js - Game Loop and Core Cluster Capture Logic (OnlinePlus Version)
 import { db, ref, update } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { cols, rows, spawnTeamUnits } from './game-config.js';
@@ -129,8 +129,14 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
             if (remoteData) {
                 if (remoteData.status === 'ended' && !isGameOver) {
                     isGameOver = true;
+                    
+                    // Clear all local selection/ghost states immediately on match end[span_0](start_span)[span_0](end_span)
+                    selectedUnit = null;
+                    legalMoves = [];
+                    stagedMove = null;
+                    clearUnitRangeOverlayButton();
+
                     if (remoteData.winner) {
-                        alert(`Game Over! Team ${remoteData.winner.toUpperCase()} won the match!`);
                         logToConsole(`Match ended remotely. Winner: ${remoteData.winner.toUpperCase()}`);
                     }
                 }
@@ -159,7 +165,15 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 hasInitializedState = true;
             }
 
-            checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { isGameOver = val; });
+            checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
+                isGameOver = val; 
+                if (val) {
+                    selectedUnit = null;
+                    legalMoves = [];
+                    stagedMove = null;
+                    clearUnitRangeOverlayButton();
+                }
+            });
             updateTurnButtonState(currentTurn, playerTeam);
         }
     );
@@ -224,7 +238,6 @@ function initCanvasGame() {
             }
         });
 
-        // Pass stagedMove along with legalMoves to renderer
         drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legalMoves, selectionAnimStartTime, stagedMove);
         
         if (selectedUnit) {
@@ -286,7 +299,7 @@ function initCanvasGame() {
         const clickedUnit = units.find(u => u.gridX === clickedCol && u.gridY === clickedRow);
 
         if (clickedUnit) {
-            stagedMove = null; // Clear staged move when clicking another unit
+            stagedMove = null;
             if (clickedUnit.team === playerTeam) {
                 selectedUnit = clickedUnit;
                 selectionAnimStartTime = performance.now();
@@ -334,16 +347,13 @@ function initCanvasGame() {
 
             let isLegalMove = legalMoves.some(m => m.c === clickedCol && m.r === clickedRow);
             if (isLegalMove) {
-                // FIRST CLICK: Stage the move if not already staged
                 if (!stagedMove || stagedMove.c !== clickedCol || stagedMove.r !== clickedRow) {
                     stagedMove = { c: clickedCol, r: clickedRow };
                     logToConsole(`Staged move for ${selectedUnit.name} to [${clickedCol}, ${clickedRow}]. Click again to confirm.`);
                     return;
                 }
 
-                // SECOND CLICK: Confirm and execute movement
                 stagedMove = null;
-
                 triggerMoveSound(selectedUnit.name);
 
                 selectedUnit.animFromX = selectedUnit.gridX;
@@ -362,7 +372,15 @@ function initCanvasGame() {
                 let isInfantryOrTank = unitNameLower.includes('infantry') || unitNameLower.includes('tank');
 
                 if (isInfantryOrTank) {
-                    if (checkBaseCaptureVictory(selectedUnit, moveKey, currentMatchId, logToConsole, isGameOver, (val) => { isGameOver = val; })) {
+                    if (checkBaseCaptureVictory(selectedUnit, moveKey, currentMatchId, logToConsole, isGameOver, (val) => { 
+                        isGameOver = val; 
+                        if (val) {
+                            selectedUnit = null;
+                            legalMoves = [];
+                            stagedMove = null;
+                            clearUnitRangeOverlayButton();
+                        }
+                    })) {
                         return;
                     }
 
@@ -403,7 +421,8 @@ function initCanvasGame() {
                     }
                 }
 
-                if (!movedUnitsThisTurn.has(selectedUnit.id)) {
+                
+      if (!movedUnitsThisTurn.has(selectedUnit.id)) {
                     movedUnitsThisTurn.add(selectedUnit.id);
                 }
 
@@ -440,13 +459,21 @@ function initCanvasGame() {
                     processDestructions(units);
                 }
 
-                checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { isGameOver = val; });
+                checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
+                    isGameOver = val; 
+                    if (val) {
+                        selectedUnit = null;
+                        legalMoves = [];
+                        stagedMove = null;
+                        clearUnitRangeOverlayButton();
+                    }
+                });
                 if (isGameOver) return;
                 
                 let nextTurn = currentTurn;
                 let turnChanged = false;
 
-                 if (movedUnitsThisTurn.size >= 1) {
+                if (movedUnitsThisTurn.size >= 1) {
                     movedUnitsThisTurn.clear();
                     units.forEach(u => u.hasMovedThisTurn = false);
                     nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
@@ -456,6 +483,7 @@ function initCanvasGame() {
                     turnChanged = true;
                     updateTurnButtonState(currentTurn, playerTeam);
                 }
+
                 if (currentMatchId) {
                     let sanitizedTileCaptures = {};
                     Object.keys(tileCaptures).forEach(k => {
@@ -492,7 +520,6 @@ function initCanvasGame() {
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
             } else {
-                // Clicked an empty invalid tile outside legal moves
                 stagedMove = null;
                 selectedUnit = null;
                 legalMoves = [];
