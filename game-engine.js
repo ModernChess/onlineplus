@@ -22,6 +22,7 @@ let currentTurn = 'blue';
 let lastSeenTurn = null;
 let selectedUnit = null;
 let legalMoves = [];
+let stagedMove = null; // Tracks the two-step click confirmation target
 let selectionAnimStartTime = null;
 let animationFrameId = null;
 let units = [];
@@ -33,7 +34,7 @@ let isGameOver = false;
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
 let coinIncomeInterval = null;
-const TURN_TIME_LIMIT_MS = 60000;
+const TURN_TIME_LIMIT_MS = 30000;
 
 const logToConsole = createConsoleLogger();
 initTileCaptures();
@@ -67,8 +68,8 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     coinIncomeInterval = setInterval(() => {
         if (isGameOver) return;
 
-        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.05).toFixed(1));
-        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.05).toFixed(1));
+        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.1).toFixed(1));
+        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.1).toFixed(1));
 
         updateGlobalCoinHUD(teamCoins);
 
@@ -77,7 +78,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 coins: teamCoins 
             });
         }
-    }, 5000);
+    }, 2000);
 
     if (units.length === 0) {
         spawnTeamUnits('blue', units);
@@ -223,7 +224,8 @@ function initCanvasGame() {
             }
         });
 
-        drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legalMoves, selectionAnimStartTime);
+        // Pass stagedMove along with legalMoves to renderer
+        drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legalMoves, selectionAnimStartTime, stagedMove);
         
         if (selectedUnit) {
             let renderPos = getRenderCoordinates(selectedUnit.gridX, selectedUnit.gridY, canvas.width, localTeam);
@@ -275,6 +277,7 @@ function initCanvasGame() {
                 cleanupUnitDeployerPopup();
                 selectedUnit = null;
                 legalMoves = [];
+                stagedMove = null;
                 clearUnitRangeOverlayButton();
                 return;
             }
@@ -283,6 +286,7 @@ function initCanvasGame() {
         const clickedUnit = units.find(u => u.gridX === clickedCol && u.gridY === clickedRow);
 
         if (clickedUnit) {
+            stagedMove = null; // Clear staged move when clicking another unit
             if (clickedUnit.team === playerTeam) {
                 selectedUnit = clickedUnit;
                 selectionAnimStartTime = performance.now();
@@ -312,6 +316,7 @@ function initCanvasGame() {
             if (selectedUnit.team !== playerTeam || currentTurn !== playerTeam) {
                 selectedUnit = null;
                 legalMoves = [];
+                stagedMove = null;
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
                 return;
@@ -321,6 +326,7 @@ function initCanvasGame() {
                 logToConsole(`Movement Blocked: ${selectedUnit.name} already moved this turn.`);
                 selectedUnit = null;
                 legalMoves = [];
+                stagedMove = null;
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
                 return;
@@ -328,6 +334,16 @@ function initCanvasGame() {
 
             let isLegalMove = legalMoves.some(m => m.c === clickedCol && m.r === clickedRow);
             if (isLegalMove) {
+                // FIRST CLICK: Stage the move if not already staged
+                if (!stagedMove || stagedMove.c !== clickedCol || stagedMove.r !== clickedRow) {
+                    stagedMove = { c: clickedCol, r: clickedRow };
+                    logToConsole(`Staged move for ${selectedUnit.name} to [${clickedCol}, ${clickedRow}]. Click again to confirm.`);
+                    return;
+                }
+
+                // SECOND CLICK: Confirm and execute movement
+                stagedMove = null;
+
                 triggerMoveSound(selectedUnit.name);
 
                 selectedUnit.animFromX = selectedUnit.gridX;
@@ -402,7 +418,6 @@ function initCanvasGame() {
                         let attackerType = (item.destroyedBy || '').toLowerCase();
                         let isFarAttack = attackerType.includes('artillery') || attackerType.includes('ship') || attackerType.includes('anti-air');
 
-                        // Read precise attacker coordinates straight from combat-mechanics record
                         let startX = item.attackerX !== undefined ? item.attackerX : targetUnit.gridX;
                         let startY = item.attackerY !== undefined ? item.attackerY : targetUnit.gridY;
                         
@@ -473,10 +488,18 @@ function initCanvasGame() {
 
                 selectedUnit = null;
                 legalMoves = [];
+                stagedMove = null;
                 selectionAnimStartTime = null;
+                clearUnitRangeOverlayButton();
+            } else {
+                // Clicked an empty invalid tile outside legal moves
+                stagedMove = null;
+                selectedUnit = null;
+                legalMoves = [];
                 clearUnitRangeOverlayButton();
             }
         } else {
+            stagedMove = null;
             selectedUnit = null;
             legalMoves = [];
             clearUnitRangeOverlayButton();
