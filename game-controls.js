@@ -1,4 +1,4 @@
-// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, and Sleek Turn Status Banner
+// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, and Sleek Turn Status Banner (OnlinePlus Version)
 import { db, ref, update } from './network.js';
 import { clearUnitRangeOverlayButton } from './unit-movement.js';
 
@@ -202,6 +202,21 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
 
     const surrenderBtn = document.getElementById('surrenderBtn');
     if (surrenderBtn) {
+        // Direct surrender binding without browser confirmation pop-ups
+        surrenderBtn.onclick = () => {
+            if (matchIdRef.current) {
+                update(ref(db, `matches_plus/${matchIdRef.current}`), {
+                    status: 'ended',
+                    winner: teamRef.current === 'blue' ? 'red' : 'blue'
+                });
+            }
+            if (animRef.current) cancelAnimationFrame(animRef.current);
+            matchIdRef.current = null;
+            clearUnitRangeOverlayButton();
+            if (onLeaveCallback) onLeaveCallback();
+            logToConsole("Match surrendered successfully.");
+        };
+
         if (!document.getElementById('afkBtn')) {
             const afkBtn = document.createElement('button');
             afkBtn.id = 'afkBtn';
