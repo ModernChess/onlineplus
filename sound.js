@@ -14,7 +14,7 @@ const soundConfigs = {
     antiAirMove: { src: repoBaseUrl + 'sound15antiairmoving.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8, boost: 1.0 },
     engineer: { src: repoBaseUrl + 'sound16engineerall.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
     antiAirSelect: { src: repoBaseUrl + 'sound17antiairselected.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 3.5, fadeDuration: 1.0, volume: 0.95, boost: 1.0 },
+    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 3.5, fadeDuration: 2.3, volume: 0.95, boost: 1.0 }, // Fades last 2.3 seconds
     rangedAttack: { src: repoBaseUrl + 'artillery.mp3', start: 0, end: 4.0, fadeDuration: 0.5, volume: 0.95, boost: 1.0 },
     burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6, boost: 1.0 }
 };
@@ -97,8 +97,8 @@ export function playSound(soundKey) {
         let baseVol = config.volume;
 
         if (config.end) {
-            // Tight 150ms micro-fade window right before the end point to prevent popping/chopping
-            const fadeOutWindow = 0.15; 
+            // Use config-defined fadeDuration if available, otherwise default to a short micro-fade window
+            const fadeOutWindow = config.fadeDuration !== undefined ? config.fadeDuration : 0.15; 
             const fadeStartTime = config.end - fadeOutWindow;
 
             if (currentTime >= fadeStartTime && currentTime < config.end) {
