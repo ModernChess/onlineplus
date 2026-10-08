@@ -346,12 +346,15 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     if (typeLower === 'ship') {
         unitTypeVal = 'naval';
         unitRange = 2; 
-    } else if (typeLower === 'tank' || typeLower === 'artillery') {
+    } else if (typeLower === 'tank') {
         unitTypeVal = 'land';
         unitRange = 3;
+    } else if (typeLower === 'artillery') {
+        unitTypeVal = 'land';
+        unitRange = 2; // Set explicitly to 2 as requested
     } else if (typeLower === 'engineer') {
         unitTypeVal = 'air';
-        unitRange = 3;
+        unitRange = 2; // Set explicitly to 2 as requested
     } else if (typeLower === 'plane') {
         unitTypeVal = 'air';
         unitRange = 4;
