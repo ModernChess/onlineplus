@@ -1,8 +1,9 @@
 // game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes (OnlinePlus Version)
 import { db, ref, update, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
-import { triggerMoveSound } from './sound.js';
 import { updateTurnStatusBanner } from './game-controls.js';
+import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
+import { getRenderCoordinates } from './game-renderer.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
@@ -30,10 +31,21 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         if (match.lastAction && match.lastAction.timestamp > lastProcessedActionTime) {
             lastProcessedActionTime = match.lastAction.timestamp;
-            if (match.lastAction.team !== playerTeam) {
-                if (match.lastAction.type === 'MOVE') {
-                    triggerMoveSound(match.lastAction.unitName);
-                }
+            // Remote action sound trigger kept local
+        }
+
+        if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedActionTime) {
+            if (match.lastAction && match.lastAction.team !== playerTeam) {
+                match.lastDestructions.events.forEach(evt => {
+                    const canvas = document.getElementById('gameCanvas');
+                    if (canvas) {
+                        if (evt.isFarAttack) {
+                            triggerFarDestructionTrails(evt.attackerX, evt.attackerY, evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
+                        } else {
+                            triggerFrontalExplosion(evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
+                        }
+                    }
+                });
             }
         }
         
@@ -116,7 +128,7 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                 matchEndTimeout = setTimeout(() => {
                     if (onMatchEnded) onMatchEnded();
                     showScreen('lobby-screen');
-                    matchEndTimeout = null; // <-- CRITICAL FIX: Reset timeout reference for subsequent matches
+                    matchEndTimeout = null;
                 }, 4000);
             }
         } else {
