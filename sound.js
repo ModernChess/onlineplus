@@ -1,138 +1,100 @@
-// sound.js - Unified Multi-Channel Audio Manager with Web Audio Boost
+// sound.js - Unified Single-Channel SFX & Isolated BGM Manager
 const repoBaseUrl = 'https://raw.githubusercontent.com/ModernChess/assets-images/main/';
 
-// Centralized configuration dictionary (infantryMove boost increased to 3.0)
 const soundConfigs = {
-    infantrySelect: { src: repoBaseUrl + 'sound4-armycharge.mp3', start: 2.0, end: 3.9, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    tankSelect: { src: repoBaseUrl + 'sound7tankstart.mp3', start: 1.5, end: 5.0, fadeDuration: 1.0, volume: 0.8, boost: 1.0 },
-    infantryMove: { src: repoBaseUrl + 'sound 3.mp3', start: 3.0, end: 6.0, fadeDuration: 1.0, volume: 1.0, boost: 3.0 }, // BUMPED UP TO 3.0 HERE
-    tankMove: { src: repoBaseUrl + 'sound5tankmove.mp3', start: 1, end: 3.5, fadeDuration: 1.0, volume: 0.8, boost: 1.0 },
-    ship: { src: repoBaseUrl + 'sound6battleshiphorn.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    planeSelect: { src: repoBaseUrl + 'sound12planestarting.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    planeMove: { src: repoBaseUrl + 'sound13planeflying.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8, boost: 1.0 },
-    mineSelect: { src: repoBaseUrl + 'sound14mines.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    antiAirMove: { src: repoBaseUrl + 'sound15antiairmoving.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8, boost: 1.0 },
-    engineer: { src: repoBaseUrl + 'sound16engineerall.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    antiAirSelect: { src: repoBaseUrl + 'sound17antiairselected.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9, boost: 1.0 },
-    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 3.5, fadeDuration: 2.3, volume: 0.95, boost: 1.0 }, // Fades last 2.3 seconds
-    rangedAttack: { src: repoBaseUrl + 'artillery.mp3', start: 0, end: 4.0, fadeDuration: 0.5, volume: 0.95, boost: 1.0 },
-    burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6, boost: 1.0 }
+    infantrySelect: { src: repoBaseUrl + 'sound4-armycharge.mp3', start: 2.0, end: 3.9, fadeDuration: 1.0, volume: 0.9 },
+    tankSelect: { src: repoBaseUrl + 'sound7tankstart.mp3', start: 1.5, end: 5.0, fadeDuration: 1.0, volume: 0.8 },
+    infantryMove: { src: repoBaseUrl + 'sound 3.mp3', start: 3.0, end: 6.0, fadeDuration: 1.0, volume: 1.0 },
+    tankMove: { src: repoBaseUrl + 'sound5tankmove.mp3', start: 1, end: 3.5, fadeDuration: 1.0, volume: 0.8 },
+    ship: { src: repoBaseUrl + 'sound6battleshiphorn.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
+    planeSelect: { src: repoBaseUrl + 'sound12planestarting.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
+    planeMove: { src: repoBaseUrl + 'sound13planeflying.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8 },
+    mineSelect: { src: repoBaseUrl + 'sound14mines.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
+    antiAirMove: { src: repoBaseUrl + 'sound15antiairmoving.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8 },
+    engineer: { src: repoBaseUrl + 'sound16engineerall.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
+    antiAirSelect: { src: repoBaseUrl + 'sound17antiairselected.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
+    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 3.5, fadeDuration: 2.3, volume: 0.95 },
+    rangedAttack: { src: repoBaseUrl + 'artillery.mp3', start: 0, end: 4.0, fadeDuration: 0.5, volume: 0.95 },
+    burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6 }
 };
 
-// Track active audio streams in memory to prevent browser garbage collection cut-offs
-const activeAudioStreams = [];
+const hoiSoundtracks = [
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20No%20Step%20Back%20Bravery%20of%20the%20Minority%20OST.mp3',
+    repoBaseUrl + 'Shatter%20the%20Empires%20-%20Hearts%20of%20Iron%204%20Man%20the%20Guns.mp3',
+    repoBaseUrl + 'Hearts%20Of%20Iron%204%20Waking%20the%20Tiger%20OST%20Battle%20Of%20Wuhan.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20Soundtrack%20Escalation.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20Soundtrack%20Retribution.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20-%20Days%20of%20Thunder.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20-%20Operation%20Barbarossa.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20Heavy%20Water.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20-%20The%20Attack.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20-%20Bring%20Forth%20the%20Tanks.mp3',
+    repoBaseUrl + 'Hearts%20of%20Iron%20IV%20-%20Axis%20Theme.mp3'
+];
 
-// Shared AudioContext for handling volume multipliers past standard browser limits
-let sharedAudioContext = null;
-function getSharedAudioContext() {
-    if (!sharedAudioContext) {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
-            sharedAudioContext = new AudioCtx();
-        }
-    }
-    if (sharedAudioContext && sharedAudioContext.state === 'suspended') {
-        sharedAudioContext.resume();
-    }
-    return sharedAudioContext;
-}
+let currentBGM = null;
+let isMatchMusicActive = false;
 
-/**
- * Universal sound player function supporting Web Audio gain amplification past 1.0.
- */
+// Dedicated single element for sound effects to prevent multi-stream decoder lockups
+let sfxAudioElement = null;
+let sfxInterval = null;
+
 export function playSound(soundKey) {
     const config = soundConfigs[soundKey];
-    if (!config) {
-        console.warn(`Sound config not found for key: ${soundKey}`);
-        return;
+    if (!config) return;
+
+    if (!sfxAudioElement) {
+        sfxAudioElement = new Audio();
+        sfxAudioElement.preload = 'auto';
     }
 
-    const audio = new Audio(config.src);
-    audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous'; // Required for Web Audio routing on external URLs
+    // Stop any currently playing sound effect immediately
+    if (sfxInterval) clearInterval(sfxInterval);
+    sfxAudioElement.pause();
 
-    let targetGainNode = null;
-    const boostMultiplier = config.boost || 1.0;
+    sfxAudioElement.src = config.src;
+    sfxAudioElement.volume = config.volume;
 
-    // If a boost greater than 1.0 is requested, route through Web Audio API
-    if (boostMultiplier > 1.0) {
-        const ctx = getSharedAudioContext();
-        if (ctx) {
-            try {
-                const sourceNode = ctx.createMediaElementSource(audio);
-                targetGainNode = ctx.createGain();
-                targetGainNode.gain.value = boostMultiplier;
-                
-                sourceNode.connect(targetGainNode);
-                targetGainNode.connect(ctx.destination);
-                audio.volume = config.volume; // Base element volume
-            } catch (e) {
-                // Fallback if browser blocks or restricts cross-origin routing
-                audio.volume = 1.0;
-            }
-        } else {
-            audio.volume = 1.0;
-        }
-    } else {
-        audio.volume = config.volume;
-    }
-
-    // Handle both immediate cached metadata and async loading to prevent missed start times
     const applyStartTime = () => {
-        if (config.start !== undefined && audio.currentTime !== config.start) {
-            audio.currentTime = config.start;
+        if (config.start !== undefined) {
+            sfxAudioElement.currentTime = config.start;
         }
     };
 
-    if (audio.readyState >= 1) {
-        applyStartTime();
-    } else {
-        audio.addEventListener('loadedmetadata', applyStartTime, { once: true });
-    }
+    sfxAudioElement.onloadedmetadata = applyStartTime;
+    applyStartTime();
 
-    activeAudioStreams.push(audio);
+    sfxInterval = setInterval(() => {
+        if (!sfxAudioElement) {
+            clearInterval(sfxInterval);
+            return;
+        }
 
-    const checkInterval = setInterval(() => {
-        let currentTime = audio.currentTime;
-        let baseVol = config.volume;
+        let currentTime = sfxAudioElement.currentTime;
 
         if (config.end) {
-            // Use config-defined fadeDuration if available, otherwise default to a short micro-fade window
-            const fadeOutWindow = config.fadeDuration !== undefined ? config.fadeDuration : 0.15; 
+            const fadeOutWindow = config.fadeDuration !== undefined ? config.fadeDuration : 0.15;
             const fadeStartTime = config.end - fadeOutWindow;
 
             if (currentTime >= fadeStartTime && currentTime < config.end) {
                 let progress = (config.end - currentTime) / fadeOutWindow;
-                if (targetGainNode) {
-                    targetGainNode.gain.value = Math.max(0, boostMultiplier * progress);
-                } else {
-                    audio.volume = Math.max(0, baseVol * progress);
-                }
+                sfxAudioElement.volume = Math.max(0, config.volume * progress);
             }
 
-            // Stop playback cleanly once the end timestamp is reached
-            if (currentTime >= config.end || audio.paused || audio.ended) {
-                audio.pause();
-                clearInterval(checkInterval);
-                const index = activeAudioStreams.indexOf(audio);
-                if (index > -1) activeAudioStreams.splice(index, 1);
+            if (currentTime >= config.end || sfxAudioElement.paused || sfxAudioElement.ended) {
+                sfxAudioElement.pause();
+                clearInterval(sfxInterval);
             }
-        } else if (audio.ended || audio.paused) {
-            clearInterval(checkInterval);
-            const index = activeAudioStreams.indexOf(audio);
-            if (index > -1) activeAudioStreams.splice(index, 1);
+        } else if (sfxAudioElement.ended || sfxAudioElement.paused) {
+            clearInterval(sfxInterval);
         }
     }, 25);
 
-    audio.play().catch(err => {
-        clearInterval(checkInterval);
-        const index = activeAudioStreams.indexOf(audio);
-        if (index > -1) activeAudioStreams.splice(index, 1);
-        console.warn(`Audio playback failed for ${soundKey}:`, err);
+    sfxAudioElement.play().catch(err => {
+        clearInterval(sfxInterval);
     });
 }
 
-// Clean mapping triggers used across your game engine & renderers
 export function triggerSelectSound(unitName) {
     let normalized = (unitName || '').toLowerCase().replace(/[\s-]/g, '');
     if (normalized.includes('infantry')) playSound('infantrySelect');
@@ -164,4 +126,46 @@ export function triggerRangedAttackSound() {
 
 export function playFireAudioEffect() {
     playSound('burningCity');
+}
+
+// Dedicated, untouched background music channel
+export function playRandomMatchMusic() {
+    if (!isMatchMusicActive) return;
+    if (currentBGM) {
+        currentBGM.pause();
+        currentBGM = null;
+    }
+
+    const randomIndex = Math.floor(Math.random() * hoiSoundtracks.length);
+    const selectedTrack = hoiSoundtracks[randomIndex];
+
+    currentBGM = new Audio(selectedTrack);
+    currentBGM.volume = 0.5;
+
+    currentBGM.onended = () => {
+        if (isMatchMusicActive) {
+            playRandomMatchMusic();
+        }
+    };
+
+    currentBGM.play().catch(err => {
+        console.warn("BGM playback blocked/interrupted:", err);
+    });
+}
+
+export function startMatchMusic() {
+    if (isMatchMusicActive && currentBGM && !currentBGM.paused) return;
+    isMatchMusicActive = true;
+    playRandomMatchMusic();
+}
+
+export function stopMatchMusic() {
+    isMatchMusicActive = false;
+    if (currentBgmStream) {
+        currentBgmStream.pause();
+    }
+    if (currentBGM) {
+        currentBGM.pause();
+        currentBGM = null;
+    }
 }
