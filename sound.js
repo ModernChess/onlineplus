@@ -13,7 +13,7 @@ const soundConfigs = {
     antiAirMove: { src: repoBaseUrl + 'sound15antiairmoving.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.8 },
     engineer: { src: repoBaseUrl + 'sound16engineerall.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
     antiAirSelect: { src: repoBaseUrl + 'sound17antiairselected.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
-    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 3.5, fadeDuration: 2.3, volume: 0.95 },
+    frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 2.2, fadeDuration: 0.3, volume: 0.95 },
     rangedAttack: { src: repoBaseUrl + 'artillery.mp3', start: 0, end: 4.0, fadeDuration: 0.5, volume: 0.95 },
     burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6 }
 };
@@ -49,50 +49,60 @@ export function playSound(soundKey) {
     }
 
     // Stop any currently playing sound effect immediately
-    if (sfxInterval) clearInterval(sfxInterval);
+    if (sfxInterval) {
+        clearInterval(sfxInterval);
+        sfxInterval = null;
+    }
     sfxAudioElement.pause();
 
     sfxAudioElement.src = config.src;
     sfxAudioElement.volume = config.volume;
+    sfxAudioElement.load();
 
-    const applyStartTime = () => {
+    const onCanPlay = () => {
+        sfxAudioElement.removeEventListener('canplay', onCanPlay);
+
         if (config.start !== undefined) {
             sfxAudioElement.currentTime = config.start;
         }
+
+        sfxAudioElement.play().then(() => {
+            sfxInterval = setInterval(() => {
+                if (!sfxAudioElement) {
+                    if (sfxInterval) clearInterval(sfxInterval);
+                    return;
+                }
+
+                let currentTime = sfxAudioElement.currentTime;
+
+                if (config.end) {
+                    const fadeOutWindow = config.fadeDuration !== undefined ? config.fadeDuration : 0.15;
+                    const fadeStartTime = config.end - fadeOutWindow;
+
+                    if (currentTime >= fadeStartTime && currentTime < config.end) {
+                        let progress = (config.end - currentTime) / fadeOutWindow;
+                        sfxAudioElement.volume = Math.max(0, config.volume * progress);
+                    }
+
+                    if (currentTime >= config.end || sfxAudioElement.paused || sfxAudioElement.ended) {
+                        sfxAudioElement.pause();
+                        clearInterval(sfxInterval);
+                        sfxInterval = null;
+                    }
+                } else if (sfxAudioElement.ended || sfxAudioElement.paused) {
+                    clearInterval(sfxInterval);
+                    sfxInterval = null;
+                }
+            }, 25);
+        }).catch(err => {
+            if (sfxInterval) {
+                clearInterval(sfxInterval);
+                sfxInterval = null;
+            }
+        });
     };
 
-    sfxAudioElement.onloadedmetadata = applyStartTime;
-    applyStartTime();
-
-    sfxInterval = setInterval(() => {
-        if (!sfxAudioElement) {
-            clearInterval(sfxInterval);
-            return;
-        }
-
-        let currentTime = sfxAudioElement.currentTime;
-
-        if (config.end) {
-            const fadeOutWindow = config.fadeDuration !== undefined ? config.fadeDuration : 0.15;
-            const fadeStartTime = config.end - fadeOutWindow;
-
-            if (currentTime >= fadeStartTime && currentTime < config.end) {
-                let progress = (config.end - currentTime) / fadeOutWindow;
-                sfxAudioElement.volume = Math.max(0, config.volume * progress);
-            }
-
-            if (currentTime >= config.end || sfxAudioElement.paused || sfxAudioElement.ended) {
-                sfxAudioElement.pause();
-                clearInterval(sfxInterval);
-            }
-        } else if (sfxAudioElement.ended || sfxAudioElement.paused) {
-            clearInterval(sfxInterval);
-        }
-    }, 25);
-
-    sfxAudioElement.play().catch(err => {
-        clearInterval(sfxInterval);
-    });
+    sfxAudioElement.addEventListener('canplay', onCanPlay);
 }
 
 export function triggerSelectSound(unitName) {
