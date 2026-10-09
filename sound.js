@@ -161,9 +161,6 @@ export function startMatchMusic() {
 
 export function stopMatchMusic() {
     isMatchMusicActive = false;
-    if (currentBgmStream) {
-        currentBgmStream.pause();
-    }
     if (currentBGM) {
         currentBGM.pause();
         currentBGM = null;
