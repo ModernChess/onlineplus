@@ -34,7 +34,7 @@ let isGameOver = false;
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
 let coinIncomeInterval = null;
-const TURN_TIME_LIMIT_MS = 30000;
+const TURN_TIME_LIMIT_MS = 60000; // 60 seconds turn timer
 
 const logToConsole = createConsoleLogger();
 initTileCaptures();
@@ -61,22 +61,34 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
     showScreen('game-screen');
     document.getElementById('playerTeamBadge').innerText = `Team: ${playerTeam.toUpperCase()}`;
-    document.getElementById('statusBanner').innerText = "Match started! 30s turn timer active.";
+    document.getElementById('statusBanner').innerText = "Match started! 60s turn timer active.";
     logToConsole(`Starting game session as team: ${playerTeam}`);
 
     if (coinIncomeInterval) clearInterval(coinIncomeInterval);
     coinIncomeInterval = setInterval(() => {
         if (isGameOver) return;
 
-        teamCoins.blue = parseFloat(((teamCoins.blue || 0) + 0.1).toFixed(1));
-        teamCoins.red = parseFloat(((teamCoins.red || 0) + 0.1).toFixed(1));
+        let updated = false;
 
-        updateGlobalCoinHUD(teamCoins);
+        // Passively regenerate coins individually for each team if they are below 3
+        if ((teamCoins.blue || 0) < 3) {
+            teamCoins.blue = parseFloat(Math.min(3, (teamCoins.blue || 0) + 0.1).toFixed(1));
+            updated = true;
+        }
 
-        if (currentMatchId) {
-            update(ref(db, `matches_plus/${currentMatchId}`), { 
-                coins: teamCoins 
-            });
+        if ((teamCoins.red || 0) < 3) {
+            teamCoins.red = parseFloat(Math.min(3, (teamCoins.red || 0) + 0.1).toFixed(1));
+            updated = true;
+        }
+
+        if (updated) {
+            updateGlobalCoinHUD(teamCoins);
+
+            if (currentMatchId) {
+                update(ref(db, `matches_plus/${currentMatchId}`), { 
+                    coins: teamCoins 
+                });
+            }
         }
     }, 2000);
 
@@ -130,7 +142,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 if (remoteData.status === 'ended' && !isGameOver) {
                     isGameOver = true;
                     
-                    // Clear all local selection/ghost states immediately on match end[span_0](start_span)[span_0](end_span)
                     selectedUnit = null;
                     legalMoves = [];
                     stagedMove = null;
@@ -192,7 +203,7 @@ function startTurnTimer(matchIdRef) {
         updateTurnTimerDisplay(timeLeftSec);
 
         if (elapsed >= TURN_TIME_LIMIT_MS && currentTurn === playerTeam) {
-            logToConsole(`Turn time limit (30s) reached! Automatically changing turn.`);
+            logToConsole(`Turn time limit (60s) reached! Automatically changing turn.`);
             movedUnitsThisTurn.clear();
             units.forEach(u => u.hasMovedThisTurn = false);
             
@@ -421,8 +432,7 @@ function initCanvasGame() {
                     }
                 }
 
-                
-      if (!movedUnitsThisTurn.has(selectedUnit.id)) {
+   if (!movedUnitsThisTurn.has(selectedUnit.id)) {
                     movedUnitsThisTurn.add(selectedUnit.id);
                 }
 
@@ -532,4 +542,4 @@ function initCanvasGame() {
             clearUnitRangeOverlayButton();
         }
     };
-}
+}             
