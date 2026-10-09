@@ -10,7 +10,7 @@ import { resolveCombat, processDestructions, unitsToDestroy } from './combat-mec
 import { ensureBuyUnitsModal, handleUnitDeployment, getPendingUnitType, setPendingUnitType, cleanupUnitDeployerPopup, setTeamCoinsRef, setCurrentTeamRef, getTeamCoins } from './deployment.js';
 import { tileCaptures, initTileCaptures, parseCoord, rbList, bbList, getGoldCoreCluster } from './team-logic.js';
 import { createConsoleLogger, updateTurnButtonState, ensureGameActionButtons, updateGlobalCoinHUD, updateTurnTimerDisplay } from './game-controls.js';
-import { triggerSelectSound, triggerMoveSound } from './sound.js';
+import { triggerSelectSound, triggerMoveSound, startMatchMusic, stopMatchMusic } from './sound.js';
 import { initializeTileCapturesState, triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { checkVictoryConditions, checkBaseCaptureVictory } from './game-victory.js';
 
@@ -64,6 +64,9 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     document.getElementById('statusBanner').innerText = "Match started! 60s turn timer active.";
     logToConsole(`Starting game session as team: ${playerTeam}`);
 
+    // Start playing random Hearts of Iron background tracks
+    startMatchMusic();
+
     if (coinIncomeInterval) clearInterval(coinIncomeInterval);
     coinIncomeInterval = setInterval(() => {
         if (isGameOver) return;
@@ -110,7 +113,15 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     const turnRef = { get current() { return currentTurn; }, set current(v) { currentTurn = v; } };
     const animRef = { get current() { return animationFrameId; }, set current(v) { animationFrameId = v; } };
 
-    ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, onLeaveCallback, logToConsole, () => updateTurnButtonState(currentTurn, playerTeam));
+    // Wrap the leave callback to also stop the background music when exiting
+    const wrappedLeaveCallback = () => {
+        stopMatchMusic();
+        if (typeof onLeaveCallback === 'function') {
+            onLeaveCallback();
+        }
+    };
+
+    ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, wrappedLeaveCallback, logToConsole, () => updateTurnButtonState(currentTurn, playerTeam));
     
     ensureBuyUnitsModal(logToConsole, () => units, () => playerTeam, matchIdRef, () => updateGlobalCoinHUD(teamCoins));
 
@@ -124,6 +135,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             if (turnTimerInterval) clearInterval(turnTimerInterval);
             if (coinIncomeInterval) clearInterval(coinIncomeInterval);
+            stopMatchMusic();
         },
         (turn, remoteData) => {
             const turnChanged = (turn !== currentTurn || turn !== lastSeenTurn);
@@ -141,6 +153,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
             if (remoteData) {
                 if (remoteData.status === 'ended' && !isGameOver) {
                     isGameOver = true;
+                    stopMatchMusic();
                     
                     selectedUnit = null;
                     legalMoves = [];
@@ -179,6 +192,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
             checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
                 isGameOver = val; 
                 if (val) {
+                    stopMatchMusic();
                     selectedUnit = null;
                     legalMoves = [];
                     stagedMove = null;
@@ -386,6 +400,7 @@ function initCanvasGame() {
                     if (checkBaseCaptureVictory(selectedUnit, moveKey, currentMatchId, logToConsole, isGameOver, (val) => { 
                         isGameOver = val; 
                         if (val) {
+                            stopMatchMusic();
                             selectedUnit = null;
                             legalMoves = [];
                             stagedMove = null;
@@ -432,7 +447,7 @@ function initCanvasGame() {
                     }
                 }
 
-   if (!movedUnitsThisTurn.has(selectedUnit.id)) {
+                 if (!movedUnitsThisTurn.has(selectedUnit.id)) {
                     movedUnitsThisTurn.add(selectedUnit.id);
                 }
 
@@ -472,6 +487,7 @@ function initCanvasGame() {
                 checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
                     isGameOver = val; 
                     if (val) {
+                        stopMatchMusic();
                         selectedUnit = null;
                         legalMoves = [];
                         stagedMove = null;
@@ -542,4 +558,4 @@ function initCanvasGame() {
             clearUnitRangeOverlayButton();
         }
     };
-}             
+}
