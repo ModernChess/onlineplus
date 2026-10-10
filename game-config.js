@@ -1,4 +1,4 @@
-// game-config.js - Configuration, Map Data Arrays, Terrain Parsers, and Local Asset Loaders (24x34 Grid System)[span_1](start_span)[span_1](end_span)
+// game-config.js - Configuration, Map Data Arrays, Terrain Parsers, and Local Asset Loaders (24x34 Grid System)
 
 export const cols = 24;
 export const rows = 34;
@@ -48,7 +48,7 @@ loadOnlineAsset(`${repoBaseUrl}blueship.png`, blueShipImg, (val) => { blueShipLo
 loadOnlineAsset(`${repoBaseUrl}redship.png`, redShipImg, (val) => { redShipLoaded = val; });
 loadOnlineAsset(`${repoBaseUrl}bluetank.png`, blueTankImg, (val) => { blueTankLoaded = val; });
 loadOnlineAsset(`${repoBaseUrl}redtank.png`, redTankImg, (val) => { redTankLoaded = val; });
-loadOnlineAsset(`${repoBaseUrl}map10.png`, mapImg, (val) => { mapLoaded = val; });
+loadOnlineAsset(`${repoBaseUrl}map16.png`, mapImg, (val) => { mapLoaded = val; });
 
 export function colLetterToIndex(colStr) {
     let upper = colStr.toUpperCase();
@@ -64,160 +64,209 @@ export function colLetterToIndex(colStr) {
     return col - baseVal;
 }
 
-const landList = [
-    "BA18", "BF18", "BG18", "BH18", "BL18", "BM18", "BN18", "BO18", "BP18", "BQ18",
-    "BR18", "BS18", "BT18", "BU18", "BV18", "BG19", "BH19", "BL19", "BM19", "BN19",
-    "BO19", "BP19", "BQ19", "BR19", "BS19", "BT19", "BU19", "BV19", "BD20", "BE20",
-    "BG20", "BH20", "BL20", "BM20", "BQ20", "BR20", "BS20", "BT20", "BU20", "BV20",
-    "AZ21", "BD21", "BE21", "BF21", "BG21", "BH21", "BI21", "BJ21", "BK21", "BL21",
-    "BM21", "BQ21", "BR21", "BS21", "BT21", "BU21", "BV21", "BD22", "BH22", "BI22",
-    "BJ22", "BK22", "BL22", "BM22", "BQ22", "BR22", "BS22", "BT22", "BU22", "BV22",
-    "AZ23", "BA23", "BC23", "BH23", "BI23", "BN23", "BO23", "BP23", "BQ23", "BR23",
-    "BS23", "BH24", "BI24", "BR24", "BS24", "BG25", "BM25", "BN25", "BS25", "BR26",
-    "BS26", "BT26", "BU26", "BV26", "BQ27", "BR27", "BV27", "BA28", "BL28", "BN28",
-    "BP28", "BQ28", "BR28", "BV28", "BI29", "BP29", "BQ29", "BR29", "BV29", "BD30",
-    "BF30", "BK30", "BL30", "BM30", "BO30", "BP30", "BQ30", "BR30", "BS30", "BT30",
-    "BU30", "BV30", "BJ31", "BK31", "BL31", "BM31", "BO31", "BP31", "BQ31", "BR31",
-    "BS31", "BT31", "BU31", "BV31", "BC32", "BH32", "BI32", "BJ32", "BK32", "BL32",
-    "BM32", "BP32", "BQ32", "BR32", "BS32", "BT32", "BU32", "BV32", "BB33", "BC33",
-    "BD33", "BH33", "BI33", "BJ33", "BN33", "BP33", "BS33", "BT33", "BU33", "BA34",
-    "BB34", "BC34", "BD34", "BE34", "BF34", "BG34", "BH34", "BI34", "BJ34", "BN34",
-    "BR34", "BA35", "BB35", "BC35", "BD35", "BE35", "BF35", "BG35", "BH35", "BI35",
-    "BJ35", "AZ36", "BA36", "BB36", "BC36", "BD36", "BE36", "BF36", "BG36", "BH36",
-    "BI36", "BJ36", "BK36", "BL36", "BM36", "BN36", "AY37", "AZ37", "BA37", "BB37",
-    "BC37", "BD37", "BE37", "BF37", "BG37", "BH37", "BI37", "BJ37", "BK37", "BL37",
-    "BM37", "BN37", "BO37", "BP37", "AY38", "AZ38", "BA38", "BB38", "BC38", "BD38",
-    "BE38", "BF38", "BG38", "BH38", "BI38", "BM38", "BN38", "BO38", "BP38", "BA39",
-    "BB39", "BC39", "BD39", "BE39", "BF39", "BG39", "BH39", "BI39", "BM39", "BN39",
-    "BO39", "BP39", "BA40", "BB40", "BC40", "BD40", "BE40", "BF40", "BG40", "BH40",
-    "BI40", "BM40", "BN40", "BO40", "BP40", "BA41", "BB41", "BC41", "BG41", "BH41",
-    "BI41", "BJ41", "BK41", "BL41", "BM41", "BN41", "BO41", "BP41", "BQ41", "AZ42",
-    "BA42", "BB42", "BC42", "BG42", "BH42", "BI42", "BJ42", "BM42", "BN42", "BO42",
-    "BP42", "BQ42", "BR42", "AY43", "AZ43", "BA43", "BB43", "BC43", "BG43", "BH43",
-    "BI43", "BJ43", "BN43", "BO43", "BP43", "BQ43", "BR43", "BS43", "AY44", "AZ44",
-    "BA44", "BB44", "BC44", "BD44", "BE44", "BF44", "BG44", "BH44", "BI44", "BJ44",
-    "BN44", "BO44", "BP44", "BQ44", "BR44", "BS44", "AY45", "AZ45", "BA45", "BB45",
-    "BC45", "BD45", "BE45", "BF45", "BG45", "BH45", "BI45", "BJ45", "BN45", "BO45",
-    "BP45", "BQ45", "BR45", "BS45", "BT45", "AY46", "AZ46", "BA46", "BB46", "BC46",
-    "BD46", "BE46", "BF46", "BG46", "BH46", "BI46", "BJ46", "BK46", "BL46", "BM46",
-    "BN46", "BO46", "BP46", "BQ46", "BR46", "BS46", "BT46", "AZ47", "BA47", "BB47",
-    "BC47", "BD47", "BE47", "BF47", "BG47", "BH47", "BI47", "BJ47", "BK47", "BL47",
-    "BM47", "BN47", "BO47", "BP47", "BQ47", "BR47", "BS47", "BT47", "BC48", "BD48",
-    "BE48", "BF48", "BG48", "BH48", "BI48", "BJ48", "BK48", "BL48", "BM48", "BN48",
-    "BO48", "BP48", "BQ48", "BR48", "BS48", "BT48", "BC49", "BD49", "BE49", "BF49",
-    "BG49", "BH49", "BI49", "BJ49", "BK49", "BL49", "BM49", "BN49", "BO49", "BP49",
-    "BQ49", "BR49", "BS49", "BC50", "BD50", "BE50", "BF50", "BG50", "BH50", "BI50",
-    "BJ50", "BK50", "BL50", "BM50", "BN50", "BO50", "BP50", "BQ50", "BR50", "AZ51",
-    "BA51", "BB51", "BC51", "BD51", "BE51", "BF51", "BG51", "BH51", "BI51", "BJ51",
-    "BK51", "BL51", "BM51", "BN51", "BO51", "BP51", "BQ51", "BR51"
+export const landList = [
+    "0,33","0,32","1,32","1,33","2,32","2,33","3,33","3,32","4,32","4,33","5,32","5,33","6,32","6,33","7,32","7,33","6,31","7,31","8,32","8,33","9,32","9,33","10,32","10,33","9,31","11,31","11,32","11,33","12,32","12,33","12,31","12,30","11,30","11,29","12,29","12,28","11,28","10,28","9,28","9,29","8,28","7,28","7,29","6,28","6,29","5,28","5,29","5,30","5,31","0,28","0,29","0,30","0,31","1,28","1,29","1,30","1,31","2,28","2,29","2,30","2,31","3,28","3,29","3,30","3,31","4,28","4,29","4,30","4,31","3,26","3,27","4,26","4,27","5,26","5,27","6,26","6,27","7,26","7,27","8,26","8,27","9,26","9,27","10,26","10,27","11,26","11,27","12,26","12,27","13,26","13,27","14,26","14,27","15,26","15,27","16,26","16,27","13,32","13,33","14,32","14,33","15,32","15,33","16,32","16,33","17,32","17,33","9,23","9,24","9,25","10,23","10,24","10,25","11,23","11,24","11,25","12,23","12,24","12,25","5,13","5,14","5,15","5,16","5,17","5,18","5,19","5,20","5,21","5,22","5,23","6,13","6,14","6,15","6,16","6,17","6,18","6,19","6,20","6,21","6,22","6,23","7,13","7,14","7,15","7,16","7,17","7,18","7,19","7,20","7,21","7,22","7,23","0,17","0,18","1,17","1,18","2,17","2,18","3,17","3,18","4,17","4,18","0,19","0,20","0,21","0,22","0,23","0,24","1,19","1,20","1,21","1,22","1,23","1,24","2,19","2,20","2,21","2,22","2,23","2,24","1,1","1,2","1,3","1,4","1,5","1,6","1,7","1,8","2,1","2,2","2,3","2,4","2,5","2,6","2,7","2,8","0,4","0,5","0,6","0,7","0,8","0,9","0,10","0,11","8,18","8,19","9,18","9,19","10,18","10,19","11,18","11,19","12,18","12,19","13,18","13,19","14,18","14,19","15,18","15,19","12,20","12,21","12,22","13,20","13,21","13,22","11,21","11,22","9,22","8,22","8,21","8,20","9,20","6,24","6,25","7,25","5,24","5,25","3,22","4,22","3,24","3,25","0,26","0,27","1,27","1,26","1,25","0,25","14,31","15,31","15,30","16,30","16,31","17,30","18,30","18,29","17,29","16,29","16,28","17,28","15,28","14,28","14,29","17,27","18,26","19,27","20,27","21,27","22,27","20,28","21,29","21,30","22,28","22,30","22,31","23,29","23,30","23,31","23,32","23,33","20,32","21,25","20,25","22,24","22,23","22,22","23,22","23,23","23,24","19,24","20,23","20,22","19,22","19,23","18,23","18,24","17,23","17,24","17,22","16,23","16,24","16,25","17,25","21,22","20,24","14,20","14,21","15,20","15,21","16,20","16,21","15,22","13,24","13,25","14,25","15,25","13,28","10,14","10,15","10,16","10,17","11,17","11,16","11,15","12,16","9,17","8,17","9,15","9,14","8,14","8,13","8,12","9,12","9,13","6,12","6,11","7,11","6,10","6,9","5,9","5,10","4,9","4,10","4,11","4,12","4,13","3,13","3,14","3,15","2,14","2,15","2,16","1,16","1,15","0,15","0,16","0,14","0,13","1,9","3,8","3,7","3,6","4,6","5,6","5,5","4,7","5,8","8,30","14,17","15,17","15,16","7,0","8,1","8,2","8,3","8,4","9,2","9,3","9,4","10,4","10,5","11,5","11,4","11,2","11,3","11,1","11,0","12,2","12,3","13,2","13,3","14,2","14,3","14,1","15,1","15,3","14,4","15,4","14,5","15,5","15,6","14,7","13,7","12,7","12,6","11,6","11,7","12,9","12,10","13,9","13,10","13,8","14,8","15,8","11,9","10,9","9,9","9,8","16,7","16,6","16,5","16,4","16,3","17,3","17,4","17,5","17,7","17,6","18,6","18,5","18,4","18,3","19,3","19,4","19,5","20,5","20,4","20,3","20,2","21,2","21,3","21,4","21,5","22,4","22,3","22,2","23,2","23,3","21,1","20,1","21,0","19,1","19,0","13,4"
 ];
 
-export const goldList = [
-    "BI18", "BJ18", "BK18", "BI19", "BK19", "BA20", "BB20", "BI20", "BJ20", "BK20", "BN20", "BO20", "BP20",
-    "BA21", "BC21", "BN21", "BP21", "BA22", "BB22", "BC22", "BN22", "BO22", "BP22",
-    "BT23", "BU23", "BV23", "BO24", "BP24", "BQ24", "BT24", "BV24", "BQ25", "BT25", "BU25", "BV25",
-    "BP26", "BQ26", "BS27", "BT27", "BU27", "BS28", "BU28", "BS29", "BT29", "BU29",
-    "BF31", "BG31", "BE32", "BG32", "BE33", "BF33", "BG33", "BK33", "BL33", "BM33",
-    "BK34", "BM34", "BP34", "BQ34", "BK35", "BL35", "BM35", "BQ35", "BQ36",
-    "BJ38", "BK38", "BL38", "BJ39", "BL39", "BJ40", "BK40", "BL40",
-    "BD41", "BE41", "BF41", "BD42", "BF42", "BD43", "BE43", "BF43",
-    "BA48", "BB48", "AZ49", "BB49", "AZ50", "BA50", "BB50"
+export const waterList = [
+    "9,10","9,11","10,10","10,11","10,12","10,13","11,13","11,12","11,11","11,10","12,11","12,12","12,13","12,14","11,14","13,14","13,15","13,13","13,12","13,11","14,11","14,12","14,13","14,14","14,15","14,9","14,10","15,9","15,10","15,11","15,12","15,13","15,14","15,15","16,9","16,10","16,11","16,12","16,13","16,14","16,15","17,9","17,10","17,11","17,12","17,13","17,14","17,15","18,9","18,10","18,11","18,12","18,13","18,14","18,15","19,9","19,10","19,11","19,12","19,13","19,14","19,15","20,9","20,10","20,11","20,12","20,13","20,14","20,15","21,9","21,10","21,11","21,12","21,13","21,14","21,15","22,9","22,10","22,11","22,12","22,13","22,14","22,15","23,9","23,10","23,11","23,12","23,13","23,14","23,15","16,16","16,17","16,18","16,19","17,16","17,17","17,18","17,19","18,16","18,17","18,18","18,19","19,16","19,17","19,18","19,19","20,16","20,17","20,18","20,19","21,16","21,17","21,18","21,19","22,16","22,17","22,18","22,19","23,16","23,17","23,18","23,19","17,20","17,21","18,20","18,21","19,20","19,21","20,20","20,21","21,20","21,21","22,20","22,21","23,20","23,21","18,7","18,8","19,7","19,8","20,7","20,8","21,7","21,8","22,7","22,8","23,7","23,8","6,1","6,2","6,3","6,4","6,5","6,6","6,7","6,8","7,1","7,2","7,3","7,4","7,5","7,6","7,7","7,8","3,0","3,1","3,2","3,3","3,4","4,0","4,1","4,2","4,3","4,4","5,0","5,1","5,2","5,3","5,4","16,0","16,1","16,2","17,0","17,1","17,2","18,0","18,1","18,2","8,0","9,0","10,0","9,1","10,1","10,2","10,3","12,0","12,1","13,0","13,1","14,0","15,0","15,2","20,0","19,2","22,0","22,1","23,0","23,1","23,4","22,5","23,5","23,6","22,6","21,6","20,6","19,6","16,8","17,8","8,10","7,10","7,9","8,9","8,8","8,7","8,6","8,5","5,7","3,5","4,5","0,3","0,2","0,1","0,0","1,0","2,0","6,0","17,31","18,31","19,31","20,31","21,31","21,32","21,33","20,33","19,33","19,32","18,32","18,33","22,32","22,33","20,30","19,30","19,29","20,29","19,28","18,28","18,27","17,26","19,26","19,25","18,25","20,26","21,26","21,28","22,26","22,25","23,25","23,26","23,27","23,28","22,29","18,22"
 ];
 
-export const goldCoreList = [
-    "BB21", "BJ19", "BO21", "BU24", "BP25", "BT28", "BL34", "BF32", "BP35", "BK39", "BE42", "BA49"
-];
-
-// Linked Gold Core Mapping System: associates each central core tile to its surrounding localized gold tiles
+// Gold Core Clusters mapping core cities, linked tiles, industry (`ind` = tank), air (`air` = artillery), and ports (`nav`)
 export const goldClusters = [
-    { core: "BB21", tiles: ["BA20", "BB20", "BA21", "BC21", "BA22", "BB22", "BC22"] },
-    { core: "BJ19", tiles: ["BI18", "BJ18", "BK18", "BI19", "BK19", "BI20", "BJ20", "BK20"] },
-    { core: "BO21", tiles: ["BN20", "BO20", "BP20", "BN21", "BP21", "BN22", "BO22", "BP22"] },
-    { core: "BU24", tiles: ["BT23", "BU23", "BV23", "BT24", "BV24", "BT25", "BU25", "BV25"] },
-    { core: "BP25", tiles: ["BO24", "BP24", "BQ24", "BQ25", "BP26", "BQ26"] },
-    { core: "BT28", tiles: ["BS27", "BT27", "BU27", "BS28", "BU28", "BS29", "BT29", "BU29"] },
-    { core: "BF32", tiles: ["BF31", "BG31", "BE32", "BG32", "BE33", "BF33", "BG33"] },
-    { core: "BL34", tiles: ["BK33", "BL33", "BM33", "BK34", "BM34", "BK35", "BL35", "BM35"] },
-    { core: "BP35", tiles: ["BP34", "BQ34", "BQ35", "BQ36"] },
-    { core: "BK39", tiles: ["BJ38", "BK38", "BL38", "BJ39", "BL39", "BJ40", "BK40", "BL40"] },
-    { core: "BE42", tiles: ["BD41", "BE41", "BF41", "BD42", "BF42", "BD43", "BE43", "BF43"] },
-    { core: "BA49", tiles: ["BA48", "BB48", "AZ49", "BB49", "AZ50", "BA50", "BB50"] }
+    {
+        core: "5,12",
+        tiles: ["5,11"],
+        units: []
+    },
+    {
+        core: "8,11",
+        tiles: ["7,12"],
+        units: []
+    },
+    {
+        core: "4,16",
+        tiles: ["4,15"],
+        units: [
+            { coordinates: "3,16", type: "artillery" },
+            { coordinates: "4,14", type: "tank" }
+        ]
+    },
+    {
+        core: "3,19",
+        tiles: ["3,20"],
+        units: []
+    },
+    {
+        core: "9,16",
+        tiles: ["8,15"],
+        units: [
+            { coordinates: "8,16", type: "tank" }
+        ]
+    },
+    {
+        core: "10,21",
+        tiles: ["10,22"],
+        units: [
+            { coordinates: "9,21", type: "tank" },
+            { coordinates: "10,20", type: "tank" },
+            { coordinates: "11,20", type: "artillery" }
+        ]
+    },
+    {
+        core: "13,16",
+        tiles: ["12,17"],
+        units: [
+            { coordinates: "14,16", type: "artillery" },
+            { coordinates: "13,17", type: "tank" },
+            { coordinates: "12,15", type: "port" }
+        ]
+    },
+    {
+        core: "15,23",
+        tiles: ["15,24"],
+        units: [
+            { coordinates: "14,24", type: "tank" },
+            { coordinates: "14,23", type: "tank" },
+            { coordinates: "13,23", type: "tank" },
+            { coordinates: "14,22", type: "artillery" },
+            { coordinates: "16,22", type: "port" }
+        ]
+    },
+    {
+        core: "10,30",
+        tiles: ["10,31"],
+        units: [
+            { coordinates: "10,29", type: "artillery" },
+            { coordinates: "9,30", type: "tank" },
+            { coordinates: "8,31", type: "tank" },
+            { coordinates: "8,29", type: "tank" },
+            { coordinates: "7,30", type: "tank" },
+            { coordinates: "6,30", type: "artillery" }
+        ]
+    },
+    {
+        core: "2,26",
+        tiles: ["2,27"],
+        units: [
+            { coordinates: "2,25", type: "tank" }
+        ]
+    },
+    {
+        core: "4,24",
+        tiles: ["4,25"],
+        units: [
+            { coordinates: "4,23", type: "tank" },
+            { coordinates: "3,23", type: "artillery" }
+        ]
+    },
+    {
+        core: "8,24",
+        tiles: ["8,25"],
+        units: [
+            { coordinates: "7,24", type: "artillery" },
+            { coordinates: "8,23", type: "tank" }
+        ]
+    },
+    {
+        core: "13,5",
+        tiles: ["13,6", "12,5"],
+        units: [
+            { coordinates: "12,4", type: "tank" },
+            { coordinates: "14,6", type: "artillery" },
+            { coordinates: "15,7", type: "port" }
+        ]
+    },
+    {
+        core: "21,23",
+        tiles: ["21,24"],
+        units: []
+    },
+    {
+        core: "2,10",
+        tiles: ["2,11", "3,10", "3,11", "3,12", "2,12", "1,12", "1,11", "1,10"],
+        units: [
+            { coordinates: "0,12", type: "artillery" },
+            { coordinates: "1,13", type: "tank" },
+            { coordinates: "1,14", type: "tank" },
+            { coordinates: "2,13", type: "tank" },
+            { coordinates: "2,9", type: "tank" },
+            { coordinates: "3,9", type: "artillery" },
+            { coordinates: "4,8", type: "port" }
+        ]
+    },
+    {
+        core: "10,8",
+        tiles: ["10,7", "10,6", "11,8", "12,8"],
+        units: [
+            { coordinates: "9,7", type: "port" },
+            { coordinates: "9,6", type: "tank" },
+            { coordinates: "9,5", type: "artillery" }
+        ]
+    },
+    {
+        core: "13,30",
+        tiles: ["13,31"],
+        units: [
+            { coordinates: "13,29", type: "artillery" },
+            { coordinates: "14,30", type: "tank" },
+            { coordinates: "15,29", type: "artillery" }
+        ]
+    }
 ];
 
-export const artList = ["BG23", "BR25", "BQ33", "BL42"];
-export const tList = ["BG24", "BP27", "BR33", "BK42"];
-export const rbList = ["BK43", "BL43", "BM43", "BK44", "BM44", "BK45", "BL45", "BM45"];
-export const bbList = ["BF23", "BF24", "BD25", "BE25", "BF25"];
-export const navList = ["BG22", "BN24", "BD32", "BS34"];
+// Explicitly extracted lists for deployment validation and renderer checking
+export const goldList = goldClusters.flatMap(c => c.tiles);
+export const goldCoreList = goldClusters.map(c => c.core);
 
-export const bbcList = ["BE24"];
-export const rbcList = ["BL44"];
+export const artList = goldClusters.flatMap(c => c.units.filter(u => u.type === 'artillery').map(u => u.coordinates));
+export const tList = goldClusters.flatMap(c => c.units.filter(u => u.type === 'tank').map(u => u.coordinates));
+export const navList = goldClusters.flatMap(c => c.units.filter(u => u.type === 'port').map(u => u.coordinates));
 
-export const redBasesList = rbList;
-export const blueBasesList = bbList;
-export const teamNavySpawns = [
-    { coordinates: "BG22", team: "blue" },
-    { coordinates: "BN24", team: "red" },
-    { coordinates: "BD32", team: "blue" },
-    { coordinates: "BS34", team: "red" }
-];
+export const bbcList = ["2,10", "10,8"];
+export const rbcList = ["10,30", "13,30"];
 
-export const artSet = new Set();
-artList.forEach(item => {
-    let m = item.match(/^([A-Z]+)(\d+)$/);
-    if (m) artSet.add(`${colLetterToIndex(m[1])},${parseInt(m[2], 10) - 18}`);
-});
+export const blueBasesList = ["2,10", "10,8"];
+export const redBasesList = ["10,30", "13,30"];
 
-export const landSet = new Set();
-landList.forEach(item => {
-    let m = item.match(/^([A-Z]+)(\d+)$/);
-    if (m) landSet.add(`${colLetterToIndex(m[1])},${parseInt(m[2], 10) - 18}`);
-});
+export const bbList = blueBasesList;
+export const rbList = redBasesList;
 
-[
-    ...goldList, 
-    ...goldCoreList, 
-    ...artList, 
-    ...tList, 
-    ...rbList, 
-    ...bbList, 
-    ...bbcList, 
-    ...rbcList,
-    ...navList
-].forEach(item => {
-    let m = item.match(/^([A-Z]+)(\d+)$/);
-    if (m) landSet.add(`${colLetterToIndex(m[1])},${parseInt(m[2], 10) - 18}`);
-});
+export const teamNavySpawns = navList.map(coord => ({
+    coordinates: coord,
+    team: ["4,8", "9,7", "12,15", "15,7"].includes(coord) ? "blue" : "axis"
+}));
+
+export const landSet = new Set(landList);
+export const waterSet = new Set(waterList);
 
 export function isWaterTerrain(col, row) {
-    return !landSet.has(`${col},${row}`);
+    return waterSet.has(`${col},${row}`);
 }
 
 export function getTerrain(col, row) {
     if (col < 0 || col >= cols || row < 0 || row >= rows) return 'out_of_bounds';
+    let key = `${col},${row}`;
+    if (bbcList.includes(key)) return 'bbc';
+    if (rbcList.includes(key)) return 'rbc';
     return isWaterTerrain(col, row) ? 'water' : 'land';
 }
 
 export function spawnTeamUnits(team, unitsList) {
     let baseList = (team === 'blue') ? blueBasesList : redBasesList;
 
-    baseList.slice(0, 2).forEach((coordStr, index) => {
-        let m = coordStr.match(/^([A-Z]+)(\d+)$/);
-        if (m) {
-            let gx = colLetterToIndex(m[1]);
-            let gy = parseInt(m[2], 10) - 18;
-
-            unitsList.push({
-                id: `${team}_spawn_infantry_${index}_${Date.now()}`,
-                team: team,
-                name: 'Infantry',
-                type: 'land',
-                gridX: gx,
-                gridY: gy,
-                range: 2,
-                health: 100,
-                hasMovedThisTurn: false
-            });
-        }
+    baseList.forEach((coordStr, index) => {
+        let [gx, gy] = coordStr.split(',').map(Number);
+        unitsList.push({
+            id: `${team}_spawn_infantry_${index}_${Date.now()}`,
+            team: team,
+            name: 'Infantry',
+            type: 'land',
+            gridX: gx,
+            gridY: gy,
+            range: 2,
+            health: 100,
+            hasMovedThisTurn: false
+        });
     });
 }
