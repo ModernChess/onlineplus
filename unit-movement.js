@@ -60,14 +60,29 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
     btn.innerText = 'R';
     btn.title = 'Toggle Independent Range Footprint';
 
+    // Make the R button significantly bigger
+    btn.style.width = '36px';
+    btn.style.height = '36px';
+    btn.style.fontSize = '18px';
+    btn.style.fontWeight = 'bold';
+    btn.style.borderRadius = '50%';
+    btn.style.display = 'flex';
+    btn.style.alignItems = 'center';
+    btn.style.justifyContent = 'center';
+    btn.style.position = 'absolute';
+    btn.style.zIndex = '100';
+    btn.style.cursor = 'pointer';
+    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.4)';
+
     const isCurrentlyOn = activeRangeUnitIds.has(selectedUnit.id);
     if (isCurrentlyOn) {
         btn.style.backgroundColor = '#27ae60';
         btn.style.color = '#fff';
     }
 
-    let leftPx = (renderPos.x + renderPos.cellSize) * scaleX;
-    let topPx = renderPos.y * scaleY;
+    // Offset significantly away towards the top left of the unit tile
+    let leftPx = (renderPos.x - 18) * scaleX;
+    let topPx = (renderPos.y - 18) * scaleY;
 
     btn.style.left = `${leftPx}px`;
     btn.style.top = `${topPx}px`;
@@ -91,15 +106,14 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
 
     container.appendChild(btn);
 }
+
 export function getLegalMoves(unit, units) {
     if (!unit) return [];
     
-    // FIX: Block all movement calculations if the unit has already moved this turn (synced from AFK/rejoin state)
     if (unit.hasMovedThisTurn) {
         return [];
     }
 
-    // Immobility validation check: Block all movement attempts for any stalemated unit or locked group member
     if (unit.stalemate || stalematedUnits.has(unit.id)) {
         return [];
     }
@@ -148,7 +162,6 @@ export function getLegalMoves(unit, units) {
                 }
             }
 
-            // FIX: Allow ships to move on standard water terrain as well as light_navy and naval types
             if (isNaval && !tileIsWater && terrain !== 'naval' && terrain !== 'light_navy') {
                 break;
             }
@@ -163,12 +176,11 @@ export function getLegalMoves(unit, units) {
     return moves;
 }
 
-
 export function getEngineerRangeTiles(unit) {
     if (!unit || unit.name !== 'Engineer') return [];
     
     let tiles = [];
-    let rangeVal = getUnitRange(unit); // 1
+    let rangeVal = getUnitRange(unit);
     let macroSize = 2;
     let unitMCol = Math.floor(unit.gridX / macroSize);
     let unitMRow = Math.floor(unit.gridY / macroSize);
@@ -208,6 +220,61 @@ export function getEngineerRangeTiles(unit) {
         for (let r = startGridY; r <= endGridY; r++) {
             for (let c = startGridX; c <= endGridX; c++) {
                 if (isWaterTerrain(c, r)) {
+                    tiles.push({ c, r });
+                }
+            }
+        }
+    });
+
+    return tiles;
+}
+
+export function getMineRangeTiles(unit) {
+    if (!unit || unit.name !== 'Mine') return [];
+    
+    let tiles = [];
+    let rangeVal = getUnitRange(unit);
+    let macroSize = 2;
+    let unitMCol = Math.floor(unit.gridX / macroSize);
+    let unitMRow = Math.floor(unit.gridY / macroSize);
+
+    let directions = [
+        { dc: 0, dr: -1 }, { dc: 0, dr: 1 },   
+        { dc: -1, dr: 0 }, { dc: 1, dr: 0 },   
+        { dc: -1, dr: -1 }, { dc: 1, dr: -1 }, 
+        { dc: -1, dr: 1 }, { dc: 1, dr: 1 }
+    ];
+
+    let targetMacroSquares = new Set();
+
+    directions.forEach(dir => {
+        for (let step = 1; step <= rangeVal; step++) {
+            let targetMCol = unitMCol + (dir.dc * step);
+            let targetMRow = unitMRow + (dir.dr * step);
+
+            let startGridX = targetMCol * macroSize;
+            let startGridY = targetMRow * macroSize;
+
+            if (startGridX < 0 || startGridX >= cols || startGridY < 0 || startGridY >= rows) {
+                break;
+            }
+
+            targetMacroSquares.add(`${targetMCol},${targetMRow}`);
+        }
+    });
+
+    let isOnWater = isWaterTerrain(unit.gridX, unit.gridY);
+
+    targetMacroSquares.forEach(coordStr => {
+        let [targetMCol, targetMRow] = coordStr.split(',').map(Number);
+        let startGridX = targetMCol * macroSize;
+        let startGridY = targetMRow * macroSize;
+        let endGridX = Math.min(cols - 1, startGridX + macroSize - 1);
+        let endGridY = Math.min(rows - 1, startGridY + macroSize - 1);
+
+        for (let r = startGridY; r <= endGridY; r++) {
+            for (let c = startGridX; c <= endGridX; c++) {
+                if (isOnWater ? isWaterTerrain(c, r) : !isWaterTerrain(c, r)) {
                     tiles.push({ c, r });
                 }
             }
