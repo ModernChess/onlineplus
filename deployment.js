@@ -35,7 +35,7 @@ const unitPrices = {
     ship: 3,
     engineer: 3,
     antiair: 2,
-    plane: 4,
+    plane: 3,
     artillery: 3,
     mine: 3
 };
