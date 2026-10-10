@@ -1,4 +1,4 @@
-// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values[span_3](start_span)[span_3](end_span)
+// team-logic.js - Handles map coordinate parsing, tile types, capture tracking, and economy coin values
 import { 
     cols, 
     rows,
@@ -11,7 +11,8 @@ import {
     navList,
     artList,
     tList,
-    goldCoreList
+    goldCoreList,
+    goldClusters
 } from './game-config.js';
 
 export const rbList = redBasesList;
@@ -19,86 +20,12 @@ export const bbList = blueBasesList;
 
 export let tileCaptures = {};
 
-// Helper to calculate Chebyshev distance between two coordinates ("C,R")
-function getChebyshevDistance(coordA, coordB) {
-    let [c1, r1] = coordA.split(',').map(Number);
-    let [c2, r2] = coordB.split(',').map(Number);
-    return Math.max(Math.abs(c1 - c2), Math.abs(r1 - r2));
-}
-
-export const goldCoreClusters = [
-    {
-        gc: "BB21",
-        linked: ["BA20", "BB20", "BA21", "BC21", "BA22", "BB22", "BC22"]
-    },
-    {
-        gc: "BJ19",
-        linked: ["BI18", "BJ18", "BK18", "BI19", "BK19", "BI20", "BJ20", "BK20"]
-    },
-    {
-        gc: "BO21",
-        linked: ["BN20", "BO20", "BP20", "BN21", "BP21", "BN22", "BO22", "BP22"]
-    },
-    {
-        gc: "BU24",
-        linked: ["BT23", "BU23", "BV23", "BT24", "BV24", "BT25", "BU25", "BV25"]
-    },
-    {
-        gc: "BP25",
-        linked: ["BO24", "BP24", "BQ24", "BQ25", "BP26", "BQ26"]
-    },
-    {
-        gc: "BT28",
-        linked: ["BS27", "BT27", "BU27", "BS28", "BU28", "BS29", "BT29", "BU29"]
-    },
-    {
-        gc: "BF32",
-        linked: ["BF31", "BG31", "BE32", "BG32", "BE33", "BF33", "BG33"]
-    },
-    {
-        gc: "BL34",
-        linked: ["BK33", "BL33", "BM33", "BK34", "BM34", "BK35", "BL35", "BM35"]
-    },
-    {
-        gc: "BP35",
-        linked: ["BP34", "BQ34", "BQ35", "BQ36"]
-    },
-    {
-        gc: "BK39",
-        linked: ["BJ38", "BK38", "BL38", "BJ39", "BL39", "BJ40", "BK40", "BL40"]
-    },
-    {
-        gc: "BE42",
-        linked: ["BD41", "BE41", "BF41", "BD42", "BF42", "BD43", "BE43", "BF43"]
-    },
-    {
-        gc: "BA49",
-        linked: ["BA48", "BB48", "AZ49", "BB49", "AZ50", "BA50", "BB50"]
-    }
-];
-
-// Automatically link artillery, tank, and port tiles to their closest Gold Core via Chebyshev distance
-[...artList, ...tList, ...navList].forEach(tileItem => {
-    let parsedTile = parseCoord(tileItem);
-    if (!parsedTile) return;
-
-    let closestCore = goldCoreList[0];
-    let minDistance = Infinity;
-
-    goldCoreList.forEach(coreStr => {
-        let parsedCore = parseCoord(coreStr);
-        let dist = getChebyshevDistance(parsedTile, parsedCore);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closestCore = coreStr;
-        }
-    });
-
-    let targetCluster = goldCoreClusters.find(c => c.gc === closestCore);
-    if (targetCluster && !targetCluster.linked.includes(tileItem)) {
-        targetCluster.linked.push(tileItem);
-    }
-});
+// Map game-config's goldClusters structure to team-logic's expected format
+export const goldCoreClusters = goldClusters.map(cluster => ({
+    gc: cluster.core,
+    linked: [...cluster.tiles],
+    units: cluster.units ? [...cluster.units] : []
+}));
 
 export const tileCoinValues = {
     'gold': 0.5,
@@ -142,6 +69,10 @@ export function parseCoord(item) {
 
 export function initTileCaptures() {
     tileCaptures = {};
+
+    const alliedGoldCores = ["2,10", "5,12", "8,11", "4,16", "3,19", "9,16", "13,16", "13,5", "10,8", "21,23"];
+    const axisGoldCores = ["10,30", "13,30", "15,23", "10,21", "8,24", "4,24", "2,26"];
+
     const registerList = (list, typeName, defaultOwner = null) => {
         if (!list) return;
         list.forEach(item => {
@@ -157,23 +88,37 @@ export function initTileCaptures() {
     registerList(blueBasesList, 'blue base', 'blue');    
     registerList(bbcList, 'blue base command', 'blue');  
     registerList(rbcList, 'red base command', 'red');    
+    registerList(navList, 'port', null);
+    registerList(artList, 'artillery', null);
+    registerList(tList, 'tank', null);
 
+    // Pre-occupy gold cores, linked tiles, and associated cluster units according to Allied (blue) or Axis (red) alignment
     goldCoreClusters.forEach(cluster => {
         let gcKey = parseCoord(cluster.gc);
+        let owner = null;
+        if (alliedGoldCores.includes(cluster.gc)) owner = 'blue';
+        else if (axisGoldCores.includes(cluster.gc)) owner = 'red';
+
         if (gcKey) {
-            tileCaptures[gcKey] = { type: 'gold core', capturedBy: null };
+            tileCaptures[gcKey] = { type: 'gold core', capturedBy: owner };
         }
+
         cluster.linked.forEach(link => {
             let linkKey = parseCoord(link);
             if (linkKey) {
-                let tName = 'gold core linked';
-                if (artList.includes(link)) tName = 'artillery';
-                else if (tList.includes(link)) tName = 'tank';
-                else if (navList.includes(link)) tName = 'port';
-
-                tileCaptures[linkKey] = { type: tName, gcCoord: gcKey, capturedBy: null };
+                tileCaptures[linkKey] = { type: 'gold core linked', gcCoord: gcKey, capturedBy: owner };
             }
         });
+
+        if (cluster.units) {
+            cluster.units.forEach(u => {
+                let uKey = parseCoord(u.coordinates);
+                if (uKey) {
+                    let uTypeName = u.type === 'port' ? 'port' : (u.type === 'artillery' ? 'artillery' : 'tank');
+                    tileCaptures[uKey] = { type: uTypeName, gcCoord: gcKey, capturedBy: owner };
+                }
+            });
+        }
     });
 }
 
@@ -182,6 +127,7 @@ export function getGoldCoreCluster(coordKey) {
         let gcKey = parseCoord(cluster.gc);
         if (gcKey === coordKey) return cluster;
         if (cluster.linked.some(l => parseCoord(l) === coordKey)) return cluster;
+        if (cluster.units && cluster.units.some(u => parseCoord(u.coordinates) === coordKey)) return cluster;
     }
     return null;
 }
