@@ -59,14 +59,14 @@ function playFireAudioEffect() {
 }
 
 export const unitColors = {
-    infantry: 'rgba(0, 128, 0, 0.35)',     
-    ship: 'rgba(128, 0, 128, 0.35)',         
-    antiair: 'rgba(0, 255, 255, 0.35)',      
-    engineer: 'rgba(0, 0, 0, 0.35)',         
-    mine: 'rgba(255, 0, 0, 0.35)',           
-    tank: 'rgba(128, 128, 128, 0.35)',       
-    plane: 'rgba(0, 0, 255, 0.35)',          
-    artillery: 'rgba(255, 165, 0, 0.35)'     
+    infantry: 'rgba(0, 128, 0, 0.20)',     
+    ship: 'rgba(128, 0, 128, 0.20)',         
+    antiair: 'rgba(0, 255, 255, 0.20)',      
+    engineer: 'rgba(0, 0, 0, 0.20)',         
+    mine: 'rgba(255, 0, 0, 0.20)',           
+    tank: 'rgba(128, 128, 128, 0.20)',       
+    plane: 'rgba(0, 0, 255, 0.20)',          
+    artillery: 'rgba(255, 165, 0, 0.20)'     
 };
 
 export const unitBorderColors = {
@@ -120,7 +120,7 @@ export function drawSmokeParticles(ctx) {
 }
 
 export function triggerFrontalExplosion(gridX, gridY, getRenderCoordinatesFunc, canvas, localTeam) {
-    triggerFrontalAttackSound(); // Play tank.mp3
+    triggerFrontalAttackSound(); 
     let pos = getRenderCoordinatesFunc(gridX, gridY, canvas.width, localTeam);
     let centerX = pos.x + pos.cellSize / 2;
     let centerY = pos.y + pos.cellSize / 2;
@@ -137,7 +137,7 @@ export function triggerFrontalExplosion(gridX, gridY, getRenderCoordinatesFunc, 
 }
 
 export function triggerFarDestructionTrails(attackerX, attackerY, targetX, targetY, getRenderCoordinatesFunc, canvas, localTeam) {
-    triggerRangedAttackSound(); // Play artillery.mp3
+    triggerRangedAttackSound(); 
     let startPos = getRenderCoordinatesFunc(attackerX, attackerY, canvas.width, localTeam);
     let endPos = getRenderCoordinatesFunc(targetX, targetY, canvas.width, localTeam);
 
@@ -274,7 +274,8 @@ export function drawCapturedTileBadges(ctx, canvas, tileCaptures, getRenderCoord
     ctx.save();
     for (let key in tileCaptures) {
         let tileInfo = tileCaptures[key];
-        if (tileInfo && tileInfo.capturedBy && tileInfo.type !== 'gold core linked') {
+        const excludedTypes = ['gold core linked', 'artillery', 'tank', 'port'];
+        if (tileInfo && tileInfo.capturedBy && !excludedTypes.includes(tileInfo.type)) {
             let parts = key.split(',');
             if (parts.length === 2) {
                 let gx = parseInt(parts[0], 10);
@@ -322,9 +323,11 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
         return; 
     }
 
+    const excludedTypes = ['gold core linked', 'artillery', 'tank', 'port'];
+
     for (let key in tileCaptures) {
         let tileInfo = tileCaptures[key];
-        if (tileInfo && tileInfo.capturedBy && tileInfo.type !== 'gold core linked') {
+        if (tileInfo && tileInfo.capturedBy && !excludedTypes.includes(tileInfo.type)) {
             let prevTile = previousTileCapturesState[key];
             if (!prevTile || prevTile.capturedBy !== tileInfo.capturedBy) {
                 if (!tileFlagAnimations.has(key) && !tileFireTimestamps.has(key)) {
@@ -378,8 +381,6 @@ export function drawCapturedTileFireAndSmoke(ctx, canvas, tileCaptures, getRende
         } else {
             tileFlagAnimations.delete(key);
             tileFireTimestamps.set(key, now);
-            
-            // Trigger dedicated independent audio instance for this specific fire
             playFireAudioEffect();
         }
     }
@@ -474,9 +475,14 @@ export function drawDeploymentOverlay(ctx, canvas, tileCaptures, units, getRende
     let activePendingType = getPendingUnitType();
     if (!activePendingType) return;
 
+    let now = performance.now();
     let typeKey = activePendingType.toLowerCase();
-    let fillColor = unitColors[typeKey] || 'rgba(33, 150, 243, 0.35)';
-    let strokeColor = unitBorderColors[typeKey] || '#2196F3';
+    let baseFillColor = unitColors[typeKey] || 'rgba(33, 150, 243, 0.20)';
+    let baseStrokeColor = unitBorderColors[typeKey] || '#2196F3';
+
+    // Slow, synchronized sine wave pulse with subtle sizing difference
+    let globalSinePulse = Math.sin(now * 0.002); 
+    let dynamicInset = 2.2 - (globalSinePulse * 0.6); 
 
     ctx.save();
     for (let gx = 0; gx < cols; gx++) {
@@ -488,14 +494,29 @@ export function drawDeploymentOverlay(ctx, canvas, tileCaptures, units, getRende
                 if (isOccupied) continue;
 
                 let pos = getRenderCoordinatesFunc(gx, gy, canvas.width, localTeam);
-                
-                ctx.fillStyle = fillColor;
-                ctx.fillRect(pos.x + 2, pos.y + 2, pos.cellSize - 4, pos.cellSize - 4);
 
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.strokeRect(pos.x + 2, pos.y + 2, pos.cellSize - 4, pos.cellSize - 4);
+                let rectX = pos.x + dynamicInset;
+                let rectY = pos.y + dynamicInset;
+                let rectSize = pos.cellSize - (dynamicInset * 2);
+
+                ctx.save();
+                // Translucent fill to see background
+                ctx.fillStyle = baseFillColor;
+                ctx.fillRect(rectX, rectY, rectSize, rectSize);
+
+                // Crisp black outline for contrast
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([]);
+                ctx.strokeRect(rectX, rectY, rectSize, rectSize);
+
+                // Glowing inner border
+                ctx.strokeStyle = baseStrokeColor;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]);
+                ctx.strokeRect(rectX, rectY, rectSize, rectSize);
+                
+                ctx.restore();
             }
         }
     }
