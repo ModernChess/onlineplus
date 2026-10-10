@@ -1,6 +1,8 @@
 // deployment.js - Handles Unit Purchasing, Affordability Checks, and Grid Placement Logic for All Units
 import { db, ref, update } from './network.js';
 import { 
+    cols,
+    rows,
     goldList, 
     bbcList, 
     rbcList, 
@@ -8,7 +10,9 @@ import {
     blueBasesList, 
     teamNavySpawns,
     artList,
-    navList 
+    tList,
+    navList,
+    isWaterTerrain 
 } from './game-config.js';
 import { tileCaptures, parseCoord } from './team-logic.js';
 import { getUnitAtCoordinate } from './game-renderer.js';
@@ -19,15 +23,21 @@ let latestUnitsRef = [];
 let teamCoinsRef = { blue: 0, red: 0 };
 let currentTeamRef = 'blue';
 
+// Pre-computed cache of valid deployment tiles for the currently pending unit type and team
+let cachedValidDeploymentTiles = new Set();
+let lastCachedUnitType = null;
+let lastCachedTeam = null;
+
 // Price configuration mapping based on user requirements
 const unitPrices = {
-    infantry: 1,
+    infantry: 0.5,
     tank: 2,
-    ship: 2,
-    engineer: 2,
-    antiair: 1,
-    plane: 3,
-    artillery: 2
+    ship: 3,
+    engineer: 3,
+    antiair: 2,
+    plane: 4,
+    artillery: 3,
+    mine: 3
 };
 
 export function setTeamCoinsRef(coinsObj) {
@@ -54,6 +64,7 @@ export function getIsShopOpen() {
 
 function toCoordSet(list) {
     const set = new Set();
+    if (!list) return set;
     list.forEach(item => {
         const parsed = parseCoord(item);
         if (parsed) {
@@ -67,14 +78,19 @@ function toCoordSet(list) {
 
 const baseAndCoreList = [...redBasesList, ...blueBasesList, ...bbcList, ...rbcList].map(i => parseCoord(i)).filter(Boolean);
 
+const infantryAllowedTiles = new Set([...goldList.map(i => parseCoord(i)).filter(Boolean), ...baseAndCoreList]);
+const tankAndPlaneAllowedTiles = new Set([...toCoordSet(tList), ...baseAndCoreList]);
+const mineAllowedTiles = new Set([...infantryAllowedTiles, ...tankAndPlaneAllowedTiles]);
+
 const deploymentRules = {
-    infantry: new Set([...goldList.map(i => parseCoord(i)).filter(Boolean), ...baseAndCoreList]),
-    tank: new Set(baseAndCoreList),
+    infantry: infantryAllowedTiles,
+    tank: tankAndPlaneAllowedTiles,
     ship: toCoordSet(navList),
-    plane: new Set(baseAndCoreList),
-    engineer: new Set(baseAndCoreList),
+    plane: tankAndPlaneAllowedTiles,
+    engineer: tankAndPlaneAllowedTiles,
     artillery: toCoordSet(artList),
-    antiair: toCoordSet(artList) // Anti-air deploys on artillery squares
+    antiair: toCoordSet(artList),
+    mine: mineAllowedTiles
 };
 
 // Helper to normalize unit type strings consistently (removes spaces and hyphens)
@@ -82,64 +98,139 @@ function normalizeType(unitType) {
     return (unitType || '').toLowerCase().replace(/[\s-]/g, '');
 }
 
-// Validates whether a specific coordinate is legally owned/controlled by the target team
-export function isTileValidForTeam(coordKey, unitType, targetTeam) {
+// Internal base check function
+function isBaseForTeam(coordKey, targetTeam) {
+    const cleanKey = parseCoord(coordKey) || (coordKey || '').trim();
+    if (targetTeam === 'blue') {
+        return blueBasesList.some(b => parseCoord(b) === cleanKey) || bbcList.some(b => parseCoord(b) === cleanKey);
+    } else {
+        return redBasesList.some(b => parseCoord(b) === cleanKey) || rbcList.some(b => parseCoord(b) === cleanKey);
+    }
+}
+
+function isOwnedByTeam(tileInfo, targetTeam) {
+    if (!tileInfo) return false;
+    const owner = tileInfo.capturedBy || tileInfo.team || tileInfo.owner;
+    return owner && owner.toLowerCase() === targetTeam.toLowerCase();
+}
+
+// Compute valid tiles ONCE when a unit is selected for purchase, storing them in a fast lookup set
+export function precomputeValidDeploymentTiles(unitType, targetTeam) {
+    cachedValidDeploymentTiles.clear();
+    lastCachedUnitType = unitType;
+    lastCachedTeam = targetTeam;
+
+    if (!unitType) return;
     const typeLower = normalizeType(unitType);
-    const cleanCoordKey = parseCoord(coordKey) || (coordKey || '').trim();
-    
-    const isBlueBase = blueBasesList.some(b => parseCoord(b) === cleanCoordKey) || bbcList.some(b => parseCoord(b) === cleanCoordKey);
-    const isRedBase = redBasesList.some(b => parseCoord(b) === cleanCoordKey) || rbcList.some(b => parseCoord(b) === cleanCoordKey);
-    
-    // Check various possible key formats in tileCaptures
-    const tileInfo = tileCaptures[cleanCoordKey] || tileCaptures[coordKey];
-    
-    // Helper to check if a tile info object belongs to the target team
-    const isOwnedByTeam = (info) => {
-        if (!info) return false;
-        const owner = info.capturedBy || info.team || info.owner;
-        return owner && owner.toLowerCase() === targetTeam.toLowerCase();
-    };
+
+    // 1. Gather candidate tiles based on unit type rules to avoid brute-forcing all 816 tiles unnecessarily
+    let candidateKeys = new Set();
+
+    if (typeLower === 'mine') {
+        // Evaluate land sources + check Chebyshev distance for water sources
+        let validLandTiles = [];
+        for (let gx = 0; gx < cols; gx++) {
+            for (let gy = 0; gy < rows; gy++) {
+                let key = `${gx},${gy}`;
+                if (!isWaterTerrain(gx, gy)) {
+                    let tileInfo = tileCaptures[key];
+                    if (isBaseForTeam(key, targetTeam) || ((goldList.includes(key) || tList.includes(key)) && isOwnedByTeam(tileInfo, targetTeam))) {
+                        validLandTiles.push({ x: gx, y: gy });
+                        candidateKeys.add(key);
+                    }
+                }
+            }
+        }
+        // Add water tiles within Chebyshev distance of 3 from valid team land tiles
+        validLandTiles.forEach(land => {
+            for (let dc = -3; dc <= 3; dc++) {
+                for (let dr = -3; dr <= 3; dr++) {
+                    let nx = land.x + dc;
+                    let ny = land.y + dr;
+                    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && isWaterTerrain(nx, ny)) {
+                        candidateKeys.add(`${nx},${ny}`);
+                    }
+                }
+            }
+        });
+    } else {
+        let allowed = deploymentRules[typeLower] || new Set();
+        allowed.forEach(k => candidateKeys.add(k));
+    }
+
+    // 2. Filter candidates strictly through team ownership rules
+    candidateKeys.forEach(coordKey => {
+        if (isTileValidForTeamInstant(coordKey, typeLower, targetTeam)) {
+            cachedValidDeploymentTiles.add(coordKey);
+        }
+    });
+}
+
+// Internal instant validation check using pre-gathered rules
+function isTileValidForTeamInstant(coordKey, typeLower, targetTeam) {
+    const cleanKey = parseCoord(coordKey) || (coordKey || '').trim();
+    let [c, r] = cleanKey.split(',').map(Number);
+    let tileInfo = tileCaptures[cleanKey] || tileCaptures[coordKey];
 
     if (typeLower === 'ship') {
-        // Must be in navList AND explicitly captured/owned by the team via tileCaptures
-        const isInNavList = navList.some(k => parseCoord(k) === cleanCoordKey || k.trim() === coordKey);
-        if (isInNavList) {
-            return isOwnedByTeam(tileInfo);
-        }
-        return false;
+        let isInNavList = navList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        return isInNavList && isOwnedByTeam(tileInfo, targetTeam);
     }
 
     if (typeLower === 'tank' || typeLower === 'plane' || typeLower === 'engineer') {
-        if (targetTeam === 'blue' && isBlueBase) return true;
-        if (targetTeam === 'red' && isRedBase) return true;
-        if (tileInfo && (tileInfo.type === 'tank' || tileInfo.type === 'tank_spawn')) {
-            return isOwnedByTeam(tileInfo);
-        }
-        return false;
+        if (isBaseForTeam(cleanKey, targetTeam)) return true;
+        let isInTList = tList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        return isInTList && isOwnedByTeam(tileInfo, targetTeam);
     }
 
     if (typeLower === 'artillery' || typeLower === 'antiair') {
-        // Must be in artList AND explicitly captured by the team
-        const isInArtList = artList.some(k => parseCoord(k) === cleanCoordKey || k.trim() === coordKey);
-        if (isInArtList) {
-            return isOwnedByTeam(tileInfo);
-        }
-        return false;
+        let isInArtList = artList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        return isInArtList && isOwnedByTeam(tileInfo, targetTeam);
     }
 
     if (typeLower === 'infantry') {
-        if (targetTeam === 'blue' && isBlueBase) return true;
-        if (targetTeam === 'red' && isRedBase) return true;
-        
-        // Must be in goldList AND explicitly captured by the team
-        const isInGoldList = goldList.some(k => parseCoord(k) === cleanCoordKey || k.trim() === coordKey);
-        if (isInGoldList) {
-            return isOwnedByTeam(tileInfo);
+        if (isBaseForTeam(cleanKey, targetTeam)) return true;
+        let isInGoldList = goldList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        return isInGoldList && isOwnedByTeam(tileInfo, targetTeam);
+    }
+
+    if (typeLower === 'mine') {
+        if (isBaseForTeam(cleanKey, targetTeam)) return true;
+        let isInGoldList = goldList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        let isInTList = tList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
+        if ((isInGoldList || isInTList) && isOwnedByTeam(tileInfo, targetTeam)) return true;
+
+        // Check Chebyshev water proximity
+        if (!isNaN(c) && !isNaN(r) && isWaterTerrain(c, r)) {
+            for (let dc = -3; dc <= 3; dc++) {
+                for (let dr = -3; dr <= 3; dr++) {
+                    let nx = c + dc;
+                    let ny = r + dr;
+                    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && !isWaterTerrain(nx, ny)) {
+                        let nKey = `${nx},${ny}`;
+                        let nInfo = tileCaptures[nKey];
+                        if (isBaseForTeam(nKey, targetTeam) || ((goldList.includes(nKey) || tList.includes(nKey)) && isOwnedByTeam(nInfo, targetTeam))) {
+                            return true;
+                        }
+                    }
+                }
+            }
         }
-        return false;
     }
 
     return false;
+}
+
+// Ultra-fast O(1) check used by the renderer on every frame
+export function isTileValidForTeam(coordKey, unitType, targetTeam) {
+    const typeLower = normalizeType(unitType);
+    const cleanKey = parseCoord(coordKey) || (coordKey || '').trim();
+
+    if (lastCachedUnitType !== typeLower || lastCachedTeam !== targetTeam) {
+        precomputeValidDeploymentTiles(unitType, targetTeam);
+    }
+
+    return cachedValidDeploymentTiles.has(cleanKey) || cachedValidDeploymentTiles.has(coordKey);
 }
 
 export function getPendingUnitType() {
@@ -148,6 +239,10 @@ export function getPendingUnitType() {
 
 export function setPendingUnitType(type) {
     pendingUnitType = type;
+    if (!type) {
+        cachedValidDeploymentTiles.clear();
+        lastCachedUnitType = null;
+    }
 }
 
 export function ensureBuyUnitsModal(logToConsole, getCurrentUnits, getPlayerTeam, matchIdRef, updateHudCallback) {
@@ -170,6 +265,7 @@ export function ensureBuyUnitsModal(logToConsole, getCurrentUnits, getPlayerTeam
                 <div class="buy-unit-item"><span>Artillery (${unitPrices.artillery} Coins)</span><button class="btn" data-type="artillery">Buy</button></div>
                 <div class="buy-unit-item"><span>Engineer (${unitPrices.engineer} Coins)</span><button class="btn" data-type="engineer">Buy</button></div>
                 <div class="buy-unit-item"><span>Anti-Air (${unitPrices.antiair} Coin)</span><button class="btn" data-type="antiair">Buy</button></div>
+                <div class="buy-unit-item"><span>Mine (${unitPrices.mine} Coins)</span><button class="btn" data-type="mine">Buy</button></div>
             </div>
         </div>
     `;
@@ -202,6 +298,9 @@ export function ensureBuyUnitsModal(logToConsole, getCurrentUnits, getPlayerTeam
             }
 
             pendingUnitType = rawType;
+            // Precompute valid tiles instantly upon selection so rendering is O(1) lightning fast
+            precomputeValidDeploymentTiles(rawType, activeTeam);
+
             modal.style.display = 'none';
             isShopOpen = false;
             
@@ -231,26 +330,26 @@ export function spawnUnitDeployerPopup(unitType, units, logToConsole, playerTeam
     popup.className = 'unit-deployer-popup minimized';
 
     const typeLower = normalizeType(unitType);
-    const allowedTiles = deploymentRules[typeLower] || new Set();
-    const validRowsList = [];
     const targetTeam = playerTeam || currentTeamRef;
     const cost = unitPrices[typeLower] || 1;
+    const validRowsList = [];
 
-    allowedTiles.forEach(coordKey => {
+    if (cachedValidDeploymentTiles.size === 0) {
+        precomputeValidDeploymentTiles(unitType, targetTeam);
+    }
+
+    cachedValidDeploymentTiles.forEach(coordKey => {
         let [c, r] = coordKey.split(',').map(Number);
-        
-        if (isTileValidForTeam(coordKey, unitType, targetTeam)) {
-            let occupyingUnit = getUnitAtCoordinate(c, r);
-            let tileInfo = tileCaptures[coordKey];
-            let displayTypeName = tileInfo ? tileInfo.type : (navList.some(n => parseCoord(n) === coordKey) ? 'port' : (artList.some(a => parseCoord(a) === coordKey) ? 'artillery' : 'base'));
+        let occupyingUnit = getUnitAtCoordinate(c, r);
+        let tileInfo = tileCaptures[coordKey];
+        let displayTypeName = tileInfo ? tileInfo.type : (isWaterTerrain(c, r) ? 'water mine' : 'base');
 
-            validRowsList.push({ 
-                col: c, 
-                row: r, 
-                typeName: displayTypeName, 
-                occupantName: occupyingUnit ? (occupyingUnit.name || occupyingUnit.type || 'Unit') : null 
-            });
-        }
+        validRowsList.push({ 
+            col: c, 
+            row: r, 
+            typeName: displayTypeName, 
+            occupantName: occupyingUnit ? (occupyingUnit.name || occupyingUnit.type || 'Unit') : null 
+        });
     });
 
     let listHtml = validRowsList.length > 0 
@@ -285,6 +384,7 @@ export function spawnUnitDeployerPopup(unitType, units, logToConsole, playerTeam
 
     popup.querySelector('#deployerCancelBtn').onclick = () => {
         pendingUnitType = null;
+        cachedValidDeploymentTiles.clear();
         popup.remove();
         logToConsole("Deployment cancelled. Re-opening shop.");
         
@@ -329,6 +429,7 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     if ((coinsRefToUse[playerTeam] || 0) < cost) {
         logToConsole(`Deployment failed: Insufficient funds for team ${playerTeam}. Requires ${cost} coins.`);
         pendingUnitType = null;
+        cachedValidDeploymentTiles.clear();
         return false;
     }
 
@@ -346,21 +447,21 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     if (typeLower === 'ship') {
         unitTypeVal = 'naval';
         unitRange = 2; 
-    } else if (typeLower === 'tank') {
-        unitTypeVal = 'land';
-        unitRange = 3;
-    } else if (typeLower === 'artillery') {
-        unitTypeVal = 'land';
-        unitRange = 2; // Set explicitly to 2 as requested
+    } else if (typeLower === 'tank' || typeLower === 'plane') {
+        unitTypeVal = typeLower === 'plane' ? 'air' : 'land';
+        unitRange = typeLower === 'plane' ? 4 : 3;
     } else if (typeLower === 'engineer') {
         unitTypeVal = 'air';
-        unitRange = 2; // Set explicitly to 2 as requested
-    } else if (typeLower === 'plane') {
-        unitTypeVal = 'air';
-        unitRange = 4;
+        unitRange = 1;
+    } else if (typeLower === 'artillery') {
+        unitTypeVal = 'land';
+        unitRange = 1;
     } else if (typeLower === 'antiair') {
         unitTypeVal = 'land';
-        unitRange = 2;
+        unitRange = 1;
+    } else if (typeLower === 'mine') {
+        unitTypeVal = isWaterTerrain(clickedCol, clickedRow) ? 'naval' : 'land';
+        unitRange = 0;
     } else if (typeLower === 'infantry') {
         unitTypeVal = 'land';
         unitRange = 2;
@@ -368,6 +469,7 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
 
     let formattedName = pendingUnitType;
     if (typeLower === 'antiair') formattedName = 'Anti-Air';
+    else if (typeLower === 'mine') formattedName = 'Mine';
     else formattedName = pendingUnitType.charAt(0).toUpperCase() + pendingUnitType.slice(1);
 
     const newUnit = {
@@ -397,5 +499,6 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     }
 
     pendingUnitType = null;
+    cachedValidDeploymentTiles.clear();
     return true;
 }
