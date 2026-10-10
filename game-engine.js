@@ -410,7 +410,8 @@ function initCanvasGame() {
                         return;
                     }
 
-                    if (tileCaptures[moveKey]) {
+
+if (tileCaptures[moveKey]) {
                         let tileInfo = tileCaptures[moveKey];
                         let cluster = getGoldCoreCluster(moveKey);
 
@@ -418,8 +419,30 @@ function initCanvasGame() {
                             let gcKey = parseCoord(cluster.gc);
                             let gcTile = tileCaptures[gcKey];
                             
-                            if (gcTile && gcTile.capturedBy !== selectedUnit.team) {
-                                gcTile.capturedBy = selectedUnit.team;
+                            let needsCapture = false;
+                            if (gcTile && gcTile.capturedBy !== selectedUnit.team) needsCapture = true;
+                            
+                            if (!needsCapture) {
+                                for (let linkItem of cluster.linked) {
+                                    let lKey = parseCoord(linkItem);
+                                    if (lKey && tileCaptures[lKey] && tileCaptures[lKey].capturedBy !== selectedUnit.team) {
+                                        needsCapture = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!needsCapture && cluster.units) {
+                                for (let uItem of cluster.units) {
+                                    let uKey = parseCoord(uItem.coordinates);
+                                    if (uKey && tileCaptures[uKey] && tileCaptures[uKey].capturedBy !== selectedUnit.team) {
+                                        needsCapture = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (needsCapture) {
+                                if (gcTile) gcTile.capturedBy = selectedUnit.team;
 
                                 cluster.linked.forEach(linkItem => {
                                     let linkKey = parseCoord(linkItem);
@@ -427,6 +450,15 @@ function initCanvasGame() {
                                         tileCaptures[linkKey].capturedBy = selectedUnit.team;
                                     }
                                 });
+
+                                if (cluster.units) {
+                                    cluster.units.forEach(uItem => {
+                                        let uKey = parseCoord(uItem.coordinates);
+                                        if (uKey && tileCaptures[uKey]) {
+                                            tileCaptures[uKey].capturedBy = selectedUnit.team;
+                                        }
+                                    });
+                                }
 
                                 teamCoins[selectedUnit.team] = (teamCoins[selectedUnit.team] || 0) + 2;
                                 logToConsole(`${selectedUnit.team.toUpperCase()} captured Gold Core cluster centrally (+2 coins)! Total: ${teamCoins[selectedUnit.team]}`);
@@ -447,7 +479,7 @@ function initCanvasGame() {
                     }
                 }
 
-                 if (!movedUnitsThisTurn.has(selectedUnit.id)) {
+                if (!movedUnitsThisTurn.has(selectedUnit.id)) {
                     movedUnitsThisTurn.add(selectedUnit.id);
                 }
 
@@ -559,3 +591,26 @@ function initCanvasGame() {
         }
     };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             
