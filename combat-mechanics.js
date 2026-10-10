@@ -215,7 +215,6 @@ export function resolveCombat(unitsList, logCallback) {
                     destroyedIds.add(enemy.id);
                     unitsToDestroy.push({ 
                         unit: enemy, destroyedBy: 'Ship',
-                        attackerX: ship.gridX, attackerY: ship.gridY,
                         reason: `Ship (${ship.team}) ranged-attacked and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
                     });
                     if (logCallback) {
@@ -226,7 +225,7 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 3. Artillery Ranged Combat Resolution (23% Randomized Success Rate)
+    // 3. Artillery Ranged Combat Resolution (50% Randomized Success Rate)
     let artilleries = unitsList.filter(u => u.name === 'Artillery');
     artilleries.forEach(artillery => {
         let rangeTiles = getUnitMacroRangeTiles(artillery);
@@ -234,20 +233,19 @@ export function resolveCombat(unitsList, logCallback) {
             let enemy = unitsList.find(u => u.gridX === tile.c && u.gridY === tile.r && u.team !== artillery.team);
             if (enemy && artilleryVulnerableUnits.has(enemy.name)) {
                 if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
-                    let success = Math.random() < 0.23;
+                    let success = Math.random() < 0.5;
                     if (success) {
                         destroyedIds.add(enemy.id);
                         unitsToDestroy.push({ 
                             unit: enemy, destroyedBy: 'Artillery',
-                            attackerX: artillery.gridX, attackerY: artillery.gridY,
-                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (23% roll passed)` 
+                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (50% roll passed)` 
                         });
                         if (logCallback) {
                             logCallback(`Combat! Artillery (${artillery.team}) scored a direct hit and destroyed enemy ${enemy.name} (${enemy.team})!`);
                         }
                     } else {
                         if (logCallback) {
-                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 23% roll)!`);
+                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 50% roll)!`);
                         }
                     }
                 }
@@ -255,7 +253,7 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 4. Anti-Air Ranged Combat Resolution (Fixed Naming/Call Matching)
+    // 4. Anti-Air Ranged Combat Resolution
     let antiairs = unitsList.filter(u => {
         let normName = (u.name || '').toLowerCase().replace(/[\s-]/g, '');
         return normName === 'antiair';
@@ -270,7 +268,6 @@ export function resolveCombat(unitsList, logCallback) {
                     destroyedIds.add(enemy.id);
                     unitsToDestroy.push({ 
                         unit: enemy, destroyedBy: 'Anti-Air',
-                        attackerX: antiair.gridX, attackerY: antiair.gridY,
                         reason: `Anti-Air (${antiair.team}) fired missiles and shot down enemy plane ${enemy.name} (${enemy.team}) within range` 
                     });
                     if (logCallback) {
@@ -295,7 +292,6 @@ export function resolveCombat(unitsList, logCallback) {
                     destroyedIds.add(enemy.id);
                     unitsToDestroy.push({ 
                         unit: enemy, destroyedBy: 'Mine',
-                        attackerX: mine.gridX, attackerY: mine.gridY,
                         reason: `Mine (${mine.team}) detonated on ${isOnWater ? 'water' : 'land'} and destroyed enemy unit ${enemy.name} (${enemy.team})` 
                     });
                     if (logCallback) {
@@ -306,28 +302,53 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 6. Plane Adjacent Combat Resolution
-    let planes = unitsList.filter(u => u.name === 'Plane');
-    planes.forEach(plane => {
-        let enemyUnits = unitsList.filter(u => u.team !== plane.team);
+    // 6. Plane Adjacent Combat Resolution (including Plane-to-Plane mutual destruction)
+    let planes = unitsList.filter(u => u.name === 'Plane' && !u.stalemate && !stalematedUnits.has(u.id));
+    planes.forEach(planeA => {
+        let enemyUnits = unitsList.filter(u => u.team !== planeA.team);
         enemyUnits.forEach(enemy => {
-            if (planeVulnerableUnits.has(enemy.name)) {
-                if (areUnitsAdjacent(plane, enemy)) {
-                    if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
+            let isVulnerableGround = planeVulnerableUnits.has(enemy.name);
+            let isEnemyPlane = enemy.name === 'Plane';
+
+            if (isVulnerableGround && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
+                if (areUnitsAdjacent(planeA, enemy)) {
+                    if (!destroyedIds.has(enemy.id)) {
                         destroyedIds.add(enemy.id);
                         unitsToDestroy.push({ 
                             unit: enemy, destroyedBy: 'Plane',
-                            attackerX: plane.gridX, attackerY: plane.gridY,
-                            reason: `Plane (${plane.team}) adjacently attacked and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
+                            reason: `Plane (${planeA.team}) adjacently attacked and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
                         });
                         if (logCallback) {
-                            logCallback(`Combat! Plane (${plane.team}) destroyed adjacent enemy ${enemy.name} (${enemy.team})!`);
+                            logCallback(`Combat! Plane (${planeA.team}) destroyed adjacent enemy ${enemy.name} (${enemy.team})!`);
                         }
+                    }
+                }
+            } else if (isEnemyPlane && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
+                let planeB = enemy;
+                if (areUnitsAdjacent(planeA, planeB)) {
+                    if (!destroyedIds.has(planeA.id)) {
+                        destroyedIds.add(planeA.id);
+                        unitsToDestroy.push({ 
+                            unit: planeA, destroyedBy: 'Plane Collision',
+                            reason: `Plane (${planeA.team}) collided in dogfight with enemy Plane (${planeB.team}) causing mutual destruction` 
+                        });
+                    }
+                    if (!destroyedIds.has(planeB.id)) {
+                        destroyedIds.add(planeB.id);
+                        unitsToDestroy.push({ 
+                            unit: planeB, destroyedBy: 'Plane Collision',
+                            reason: `Plane (${planeB.team}) collided in dogfight with enemy Plane (${planeA.team}) causing mutual destruction` 
+                        });
+                    }
+                    if (logCallback) {
+                        logCallback(`Combat! Planes from opposing teams engaged in a dogfight and mutually destroyed each other!`);
                     }
                 }
             }
         });
     });
+
+               
 
     // 7. Superunit Equal-Power Locks, Stalemates, and Reinforcement/Rescue Breaking
     let blueSuperunits = getSuperunitsForTeamBase('blue', unitsList);
@@ -386,7 +407,6 @@ export function resolveCombat(unitsList, logCallback) {
                             destroyedIds.add(u.id);
                             unitsToDestroy.push({
                                 unit: u, destroyedBy: 'Superunit Power',
-                                attackerX: suBlue.units[0].gridX, attackerY: suBlue.units[0].gridY,
                                 reason: `Blue superunit power (${suBlue.power}) overpowered Red superunit power (${suRed.power})`
                             });
                             if (logCallback) {
@@ -400,7 +420,6 @@ export function resolveCombat(unitsList, logCallback) {
                             destroyedIds.add(u.id);
                             unitsToDestroy.push({
                                 unit: u, destroyedBy: 'Superunit Power',
-                                attackerX: suRed.units[0].gridX, attackerY: suRed.units[0].gridY,
                                 reason: `Red superunit power (${suRed.power}) overpowered Blue superunit power (${suBlue.power})`
                             });
                             if (logCallback) {
@@ -423,7 +442,6 @@ export function resolveCombat(unitsList, logCallback) {
                     destroyedIds.add(shipA.id);
                     unitsToDestroy.push({ 
                         unit: shipA, destroyedBy: 'Ship Collision',
-                        attackerX: shipB.gridX, attackerY: shipB.gridY,
                         reason: `Ship (${shipA.team}) touched adjacent enemy Ship (${shipB.team}) causing mutual destruction` 
                     });
                 }
@@ -431,7 +449,6 @@ export function resolveCombat(unitsList, logCallback) {
                     destroyedIds.add(shipB.id);
                     unitsToDestroy.push({ 
                         unit: shipB, destroyedBy: 'Ship Collision',
-                        attackerX: shipA.gridX, attackerY: shipA.gridY,
                         reason: `Ship (${shipB.team}) touched adjacent enemy Ship (${shipA.team}) causing mutual destruction` 
                     });
                 }
@@ -453,7 +470,6 @@ export function resolveCombat(unitsList, logCallback) {
                         destroyedIds.add(enemy.id);
                         unitsToDestroy.push({ 
                             unit: enemy, destroyedBy: attacker.name,
-                            attackerX: attacker.gridX, attackerY: attacker.gridY,
                             reason: `${attacker.name} (${attacker.team}) adjacently engaged and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
                         });
                         if (logCallback) {
@@ -482,3 +498,21 @@ export function processDestructions(unitsList) {
     updateStalemates(unitsList);
     return true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                
+                     
