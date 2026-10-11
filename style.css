@@ -330,6 +330,33 @@ p {
     box-sizing: border-box;
 }
 
+/* Artillery Strike 'D' Button Overlay */
+.artillery-strike-btn {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: var(--danger);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 30;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+    border: 2px solid #ffffff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    padding: 8px;
+    margin: -8px;
+    transition: transform 0.1s ease;
+}
+
+.artillery-strike-btn:active {
+    transform: scale(0.92);
+}
+
 /* Buy Units Modal Styles */
 .buy-units-modal-overlay {
     position: fixed;
