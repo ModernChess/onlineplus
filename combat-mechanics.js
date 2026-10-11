@@ -225,33 +225,7 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 3. Artillery Ranged Combat Resolution (50% Randomized Success Rate)
-    let artilleries = unitsList.filter(u => u.name === 'Artillery');
-    artilleries.forEach(artillery => {
-        let rangeTiles = getUnitMacroRangeTiles(artillery);
-        rangeTiles.forEach(tile => {
-            let enemy = unitsList.find(u => u.gridX === tile.c && u.gridY === tile.r && u.team !== artillery.team);
-            if (enemy && artilleryVulnerableUnits.has(enemy.name)) {
-                if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
-                    let success = Math.random() < 0.5;
-                    if (success) {
-                        destroyedIds.add(enemy.id);
-                        unitsToDestroy.push({ 
-                            unit: enemy, destroyedBy: 'Artillery',
-                            reason: `Artillery (${artillery.team}) successfully shelled and destroyed enemy unit ${enemy.name} (${enemy.team}) (50% roll passed)` 
-                        });
-                        if (logCallback) {
-                            logCallback(`Combat! Artillery (${artillery.team}) scored a direct hit and destroyed enemy ${enemy.name} (${enemy.team})!`);
-                        }
-                    } else {
-                        if (logCallback) {
-                            logCallback(`Combat! Artillery (${artillery.team}) shelled enemy ${enemy.name} (${enemy.team}), but the shot missed (failed 50% roll)!`);
-                        }
-                    }
-                }
-            }
-        });
-    });
+    // Note: Artillery automated resolution removed. Artillery attacks are now manually targeted and resolved via user selection when range is toggled.
 
     // 4. Anti-Air Ranged Combat Resolution
     let antiairs = unitsList.filter(u => {
@@ -348,8 +322,6 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-               
-
     // 7. Superunit Equal-Power Locks, Stalemates, and Reinforcement/Rescue Breaking
     let blueSuperunits = getSuperunitsForTeamBase('blue', unitsList);
     let redSuperunits = getSuperunitsForTeamBase('red', unitsList);
@@ -432,7 +404,10 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
-    // 8. Ship-to-Ship Adjacent Mutual Destruction Check
+    
+
+
+// 8. Ship-to-Ship Adjacent Mutual Destruction Check
     let shipsList = unitsList.filter(u => u.name === 'Ship' && !u.stalemate && !stalematedUnits.has(u.id));
     shipsList.forEach(shipA => {
         let enemyShips = unitsList.filter(u => u.name === 'Ship' && u.team !== shipA.team && !u.stalemate && !stalematedUnits.has(u.id));
@@ -498,21 +473,3 @@ export function processDestructions(unitsList) {
     updateStalemates(unitsList);
     return true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                
-                     
