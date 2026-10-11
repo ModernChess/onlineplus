@@ -6,7 +6,7 @@ import { initViewportControls, resetCamera, screenToWorldCoordinates, getCameraS
 import { listenToMatchUpdates, listenToMatchChat } from './game-sync.js';
 import { drawGameScene, getRenderCoordinates } from './game-renderer.js';
 import { getLegalMoves, getShowUnitRange, clearUnitRangeOverlayButton, updateUnitRangeOverlayButton } from './unit-movement.js';
-import { resolveCombat, processDestructions, unitsToDestroy } from './combat-mechanics.js';
+import { resolveCombat, processDestructions, unitsToDestroy, getUnitMacroRangeTiles, artilleryVulnerableUnits } from './combat-mechanics.js';
 import { ensureBuyUnitsModal, handleUnitDeployment, getPendingUnitType, setPendingUnitType, cleanupUnitDeployerPopup, setTeamCoinsRef, setCurrentTeamRef, getTeamCoins } from './deployment.js';
 import { tileCaptures, initTileCaptures, parseCoord, rbList, bbList, getGoldCoreCluster } from './team-logic.js';
 import { createConsoleLogger, updateTurnButtonState, ensureGameActionButtons, updateGlobalCoinHUD, updateTurnTimerDisplay } from './game-controls.js';
@@ -22,7 +22,7 @@ let currentTurn = 'blue';
 let lastSeenTurn = null;
 let selectedUnit = null;
 let legalMoves = [];
-let stagedMove = null; // Tracks the two-step click confirmation target
+let stagedMove = null;
 let selectionAnimStartTime = null;
 let animationFrameId = null;
 let units = [];
@@ -34,10 +34,155 @@ let isGameOver = false;
 let turnStartTime = Date.now();
 let turnTimerInterval = null;
 let coinIncomeInterval = null;
-const TURN_TIME_LIMIT_MS = 60000; // 60 seconds turn timer
+const TURN_TIME_LIMIT_MS = 60000;
 
 const logToConsole = createConsoleLogger();
 initTileCaptures();
+
+function clearArtilleryButtons() {
+    document.querySelectorAll('.artillery-strike-btn').forEach(btn => btn.remove());
+}
+
+function updateArtilleryButtons(canvas, selectedUnit, localTeam) {
+    clearArtilleryButtons();
+    // Hide 'D' buttons if it's not the player's turn, or if unit criteria aren't met
+    if (!selectedUnit || selectedUnit.name !== 'Artillery' || !getShowUnitRange(selectedUnit.id)) return;
+    if (currentTurn !== playerTeam) return;
+
+    const container = document.getElementById('canvas-container');
+    if (!container) return;
+
+    let rangeTiles = getUnitMacroRangeTiles(selectedUnit);
+    let cam = getCameraState();
+    let scaleX = canvas.clientWidth / canvas.width;
+    let scaleY = canvas.clientHeight / canvas.height;
+
+    rangeTiles.forEach(tile => {
+        let enemy = units.find(u => u.gridX === tile.c && u.gridY === tile.r && u.team !== selectedUnit.team);
+        if (enemy && artilleryVulnerableUnits.has(enemy.name)) {
+            let renderPos = getRenderCoordinates(enemy.gridX, enemy.gridY, canvas.width, localTeam);
+            
+            let worldX = renderPos.x * cam.zoom + cam.x;
+            let worldY = renderPos.y * cam.zoom + cam.y;
+            let screenX = worldX * scaleX;
+            let screenY = worldY * scaleY;
+            
+            let scaledCellSize = renderPos.cellSize * cam.zoom * scaleX;
+            let btnSize = Math.min(32, Math.max(20, scaledCellSize * 0.5));
+
+            let offsetX = scaledCellSize - (btnSize * 0.3);
+            let offsetY = -btnSize * 0.2;
+
+            let btn = document.createElement('button');
+            btn.className = 'artillery-strike-btn';
+            btn.innerText = 'D';
+            btn.title = `Strike enemy ${enemy.name} with Artillery`;
+
+            btn.style.left = `${screenX + offsetX}px`;
+            btn.style.top = `${screenY + offsetY}px`;
+            btn.style.width = `${btnSize}px`;
+            btn.style.height = `${btnSize}px`;
+            btn.style.fontSize = `${Math.max(10, btnSize * 0.45)}px`;
+
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                triggerArtilleryStrike(enemy, selectedUnit, canvas);
+            };
+
+            container.appendChild(btn);
+        }
+    });
+}
+
+function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas) {
+    // Calculate Chebyshev distance (8-directional distance)
+    let chebyshevDist = Math.max(
+        Math.abs(artilleryUnit.gridX - targetEnemy.gridX),
+        Math.abs(artilleryUnit.gridY - targetEnemy.gridY)
+    );
+
+    // Dynamic success rate based on distance:
+    // 60% at <= 4 squares away, scaling down to 18% at >= 8 squares away
+    let successRate = 0.60;
+    if (chebyshevDist >= 8) {
+        successRate = 0.18;
+    } else if (chebyshevDist > 4) {
+        successRate = 0.60 - (chebyshevDist - 4) * 0.105;
+    }
+
+    let success = Math.random() < successRate;
+    let triggeredDestructions = [];
+    let destructionTimestamp = Date.now();
+
+    if (success) {
+        unitsToDestroy.push({
+            unit: targetEnemy,
+            destroyedBy: 'Artillery',
+            reason: `Artillery (${artilleryUnit.team}) successfully shelled and destroyed target ${targetEnemy.name} at distance ${chebyshevDist} (chance: ${(successRate * 100).toFixed(1)}%)`
+        });
+        triggeredDestructions.push({
+            targetId: targetEnemy.id,
+            targetX: targetEnemy.gridX,
+            targetY: targetEnemy.gridY,
+            attackerX: artilleryUnit.gridX,
+            attackerY: artilleryUnit.gridY,
+            isFarAttack: true
+        });
+        triggerFarDestructionTrails(artilleryUnit.gridX, artilleryUnit.gridY, targetEnemy.gridX, targetEnemy.gridY, getRenderCoordinates, canvas, localTeam);
+        logToConsole(`Artillery Strike 'D' Success! (${(successRate * 100).toFixed(1)}% chance at dist ${chebyshevDist}) Direct hit destroyed ${targetEnemy.name}!`);
+    } else {
+        triggerFarDestructionTrails(artilleryUnit.gridX, artilleryUnit.gridY, targetEnemy.gridX, targetEnemy.gridY, getRenderCoordinates, canvas, localTeam);
+        logToConsole(`Artillery Strike 'D' Missed! (${(successRate * 100).toFixed(1)}% chance at dist ${chebyshevDist}) Shot fired at ${targetEnemy.name} missed.`);
+    }
+
+    processDestructions(units);
+    clearArtilleryButtons();
+    checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { isGameOver = val; });
+
+    artilleryUnit.hasMovedThisTurn = true;
+    movedUnitsThisTurn.add(artilleryUnit.id);
+
+    // Switch turn automatically after executing D strike
+    movedUnitsThisTurn.clear();
+    units.forEach(u => u.hasMovedThisTurn = false);
+    let nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
+    currentTurn = nextTurn;
+    lastSeenTurn = nextTurn;
+    turnStartTime = Date.now();
+    updateTurnButtonState(currentTurn, playerTeam);
+
+    if (currentMatchId) {
+        let sanitizedTileCaptures = {};
+        Object.keys(tileCaptures).forEach(k => {
+            sanitizedTileCaptures[k] = {
+                type: tileCaptures[k].type,
+                capturedBy: tileCaptures[k].capturedBy != null ? tileCaptures[k].capturedBy : null
+            };
+        });
+
+        update(ref(db, `matches_plus/${currentMatchId}`), {
+            units: units,
+            tileCaptures: sanitizedTileCaptures,
+            coins: teamCoins,
+            turn: nextTurn,
+            lastDestructions: triggeredDestructions.length > 0 ? {
+                timestamp: destructionTimestamp,
+                events: triggeredDestructions
+            } : null,
+            lastAction: {
+                type: 'ARTILLERY_STRIKE_D',
+                unitName: artilleryUnit.name,
+                team: artilleryUnit.team,
+                timestamp: Date.now()
+            }
+        });
+    }
+
+    selectedUnit = null;
+    legalMoves = [];
+    clearUnitRangeOverlayButton();
+}
+
 
 export function startGameSession(matchId, team, user, onLeaveCallback) {
     currentMatchId = matchId;
@@ -57,6 +202,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     movedUnitsThisTurn.clear();
     setPendingUnitType(null);
     clearUnitRangeOverlayButton();
+    clearArtilleryButtons();
     initTileCaptures();
 
     showScreen('game-screen');
@@ -64,7 +210,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     document.getElementById('statusBanner').innerText = "Match started! 60s turn timer active.";
     logToConsole(`Starting game session as team: ${playerTeam}`);
 
-    // Start playing random Hearts of Iron background tracks
     startMatchMusic();
 
     if (coinIncomeInterval) clearInterval(coinIncomeInterval);
@@ -73,7 +218,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
         let updated = false;
 
-        // Passively regenerate coins individually for each team if they are below 3
         if ((teamCoins.blue || 0) < 3) {
             teamCoins.blue = parseFloat(Math.min(3, (teamCoins.blue || 0) + 0.1).toFixed(1));
             updated = true;
@@ -113,16 +257,15 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     const turnRef = { get current() { return currentTurn; }, set current(v) { currentTurn = v; } };
     const animRef = { get current() { return animationFrameId; }, set current(v) { animationFrameId = v; } };
 
-    // Wrap the leave callback to also stop the background music when exiting
     const wrappedLeaveCallback = () => {
         stopMatchMusic();
+        clearArtilleryButtons();
         if (typeof onLeaveCallback === 'function') {
             onLeaveCallback();
         }
     };
 
     ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, wrappedLeaveCallback, logToConsole, () => updateTurnButtonState(currentTurn, playerTeam));
-    
     ensureBuyUnitsModal(logToConsole, () => units, () => playerTeam, matchIdRef, () => updateGlobalCoinHUD(teamCoins));
 
     updateTurnButtonState(currentTurn, playerTeam);
@@ -136,6 +279,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
             if (turnTimerInterval) clearInterval(turnTimerInterval);
             if (coinIncomeInterval) clearInterval(coinIncomeInterval);
             stopMatchMusic();
+            clearArtilleryButtons();
         },
         (turn, remoteData) => {
             const turnChanged = (turn !== currentTurn || turn !== lastSeenTurn);
@@ -159,6 +303,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                     legalMoves = [];
                     stagedMove = null;
                     clearUnitRangeOverlayButton();
+                    clearArtilleryButtons();
 
                     if (remoteData.winner) {
                         logToConsole(`Match ended remotely. Winner: ${remoteData.winner.toUpperCase()}`);
@@ -197,6 +342,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                     legalMoves = [];
                     stagedMove = null;
                     clearUnitRangeOverlayButton();
+                    clearArtilleryButtons();
                 }
             });
             updateTurnButtonState(currentTurn, playerTeam);
@@ -220,6 +366,7 @@ function startTurnTimer(matchIdRef) {
             logToConsole(`Turn time limit (60s) reached! Automatically changing turn.`);
             movedUnitsThisTurn.clear();
             units.forEach(u => u.hasMovedThisTurn = false);
+            clearArtilleryButtons();
             
             let nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
             currentTurn = nextTurn;
@@ -267,15 +414,19 @@ function initCanvasGame() {
         
         if (selectedUnit) {
             let renderPos = getRenderCoordinates(selectedUnit.gridX, selectedUnit.gridY, canvas.width, localTeam);
+            let scaleX = canvas.clientWidth / canvas.width;
+            let scaleY = canvas.clientHeight / canvas.height;
+            let cam = getCameraState();
+            let worldX = renderPos.x * cam.zoom + cam.x;
+            let worldY = renderPos.y * cam.zoom + cam.y;
+            let screenX = worldX * scaleX;
+            let screenY = worldY * scaleY;
+            
+            let scaledCellSize = renderPos.cellSize * cam.zoom * scaleX;
+            let btnSize = Math.min(28, Math.max(16, scaledCellSize * 0.45));
+
             let btn = document.getElementById('activeUnitRangeBtn');
             if (btn) {
-                let cam = getCameraState();
-                let screenX = (renderPos.x * cam.zoom + cam.x) * (canvas.clientWidth / canvas.width);
-                let screenY = (renderPos.y * cam.zoom + cam.y) * (canvas.clientHeight / canvas.height);
-                
-                let scaledCellSize = renderPos.cellSize * cam.zoom * (canvas.clientWidth / canvas.width);
-                let btnSize = Math.min(28, Math.max(16, scaledCellSize * 0.45));
-
                 let offsetX = scaledCellSize - (btnSize * 0.3);
                 let offsetY = -btnSize * 0.3;
 
@@ -285,6 +436,14 @@ function initCanvasGame() {
                 btn.style.height = `${btnSize}px`;
                 btn.style.fontSize = `${Math.max(9, btnSize * 0.45)}px`;
             }
+
+            if (selectedUnit.name === 'Artillery' && getShowUnitRange(selectedUnit.id)) {
+                updateArtilleryButtons(canvas, selectedUnit, localTeam);
+            } else {
+                clearArtilleryButtons();
+            }
+        } else {
+            clearArtilleryButtons();
         }
 
         animationFrameId = requestAnimationFrame(renderGameLoop);
@@ -309,7 +468,12 @@ function initCanvasGame() {
             clickedRow = rows - 1 - clickedRow;
         }
 
-        if (getPendingUnitType()) {
+        
+
+
+
+
+if (getPendingUnitType()) {
             let placed = handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, currentMatchId, logToConsole, teamCoins, () => updateGlobalCoinHUD(teamCoins));
             if (placed) {
                 cleanupUnitDeployerPopup();
@@ -317,6 +481,7 @@ function initCanvasGame() {
                 legalMoves = [];
                 stagedMove = null;
                 clearUnitRangeOverlayButton();
+                clearArtilleryButtons();
                 return;
             }
         }
@@ -357,6 +522,7 @@ function initCanvasGame() {
                 stagedMove = null;
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
+                clearArtilleryButtons();
                 return;
             }
 
@@ -367,6 +533,7 @@ function initCanvasGame() {
                 stagedMove = null;
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
+                clearArtilleryButtons();
                 return;
             }
 
@@ -405,13 +572,13 @@ function initCanvasGame() {
                             legalMoves = [];
                             stagedMove = null;
                             clearUnitRangeOverlayButton();
+                            clearArtilleryButtons();
                         }
                     })) {
                         return;
                     }
 
-
-if (tileCaptures[moveKey]) {
+                    if (tileCaptures[moveKey]) {
                         let tileInfo = tileCaptures[moveKey];
                         let cluster = getGoldCoreCluster(moveKey);
 
@@ -524,6 +691,7 @@ if (tileCaptures[moveKey]) {
                         legalMoves = [];
                         stagedMove = null;
                         clearUnitRangeOverlayButton();
+                        clearArtilleryButtons();
                     }
                 });
                 if (isGameOver) return;
@@ -577,40 +745,20 @@ if (tileCaptures[moveKey]) {
                 stagedMove = null;
                 selectionAnimStartTime = null;
                 clearUnitRangeOverlayButton();
+                clearArtilleryButtons();
             } else {
                 stagedMove = null;
                 selectedUnit = null;
                 legalMoves = [];
                 clearUnitRangeOverlayButton();
+                clearArtilleryButtons();
             }
         } else {
             stagedMove = null;
             selectedUnit = null;
             legalMoves = [];
             clearUnitRangeOverlayButton();
+            clearArtilleryButtons();
         }
     };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-             
