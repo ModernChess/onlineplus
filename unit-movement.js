@@ -27,7 +27,7 @@ export function getUnitRange(unit) {
         return 0;
     }
     if (unit.name === 'Artillery') {
-        return 3;
+        return 3; // Fixed: Artillery range set to 3 to activate R and D buttons
     }
     if (unit.name === 'Engineer' || unit.name === 'Mine') {
         return 1;
@@ -60,27 +60,12 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
     btn.innerText = 'R';
     btn.title = 'Toggle Independent Range Footprint';
 
-    // Make the R button significantly bigger
-    btn.style.width = '36px';
-    btn.style.height = '36px';
-    btn.style.fontSize = '18px';
-    btn.style.fontWeight = 'bold';
-    btn.style.borderRadius = '50%';
-    btn.style.display = 'flex';
-    btn.style.alignItems = 'center';
-    btn.style.justifyContent = 'center';
-    btn.style.position = 'absolute';
-    btn.style.zIndex = '100';
-    btn.style.cursor = 'pointer';
-    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.4)';
-
     const isCurrentlyOn = activeRangeUnitIds.has(selectedUnit.id);
     if (isCurrentlyOn) {
         btn.style.backgroundColor = '#27ae60';
         btn.style.color = '#fff';
     }
 
-    // Offset significantly away towards the top left of the unit tile
     let leftPx = (renderPos.x - 18) * scaleX;
     let topPx = (renderPos.y - 18) * scaleY;
 
