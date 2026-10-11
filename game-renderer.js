@@ -13,7 +13,7 @@ import {
 } from './game-config.js';
 import { applyCameraTransform } from './viewport.js';
 import { getUnitRange, getShowUnitRange, getEngineerRangeTiles, getMineRangeTiles } from './unit-movement.js';
-import { getSuperunitsForTeam, getUnitMacroRangeTiles, stalematedUnits } from './combat-mechanics.js';
+import { getSuperunitsForTeam, getUnitMacroRangeTiles, stalematedUnits, artilleryVulnerableUnits } from './combat-mechanics.js';
 import { tileCaptures } from './team-logic.js';
 import { spawnSmokeTrail, drawSmokeParticles, drawCapturedTileBadges, drawCapturedTileFireAndSmoke, drawDeploymentOverlay, drawCombatAnimations } from './renderer-helpers.js';
 
@@ -197,53 +197,6 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
                     ctx.setLineDash([4, 4]);
                     ctx.strokeRect(rectX, rectY, rectWidth, rectHeight);
                 });
-
-                if (unit.name === 'Engineer') {
-                    let engineerTiles = getEngineerRangeTiles(unit);
-                    let isOnWater = isWaterTerrain(unit.gridX, unit.gridY);
-
-                    engineerTiles.forEach(tile => {
-                        let tilePos = getRenderCoordinates(tile.c, tile.r, canvas.width, localTeam);
-                        let centerX = tilePos.x + tilePos.cellSize / 2;
-                        let centerY = tilePos.y + tilePos.cellSize / 2;
-                        let radius = tilePos.cellSize * 0.18;
-
-                        ctx.save();
-                        ctx.globalAlpha = 1.0; 
-                        ctx.fillStyle = isOnWater ? '#2980b9' : '#1e8449';
-                        ctx.strokeStyle = '#000000';
-                        ctx.lineWidth = 2;
-
-                        ctx.beginPath();
-                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.stroke();
-                        ctx.restore();
-                    });
-                } else if (unit.name === 'Mine') {
-                    let mineTiles = getMineRangeTiles(unit);
-                    let isOnWater = isWaterTerrain(unit.gridX, unit.gridY);
-
-                    mineTiles.forEach(tile => {
-                        let tilePos = getRenderCoordinates(tile.c, tile.r, canvas.width, localTeam);
-                        let centerX = tilePos.x + tilePos.cellSize / 2;
-                        let centerY = tilePos.y + tilePos.cellSize / 2;
-                        let radius = tilePos.cellSize * 0.18;
-
-                        ctx.save();
-                        ctx.globalAlpha = 1.0; 
-                        // Water renders blue (#2980b9), Land renders green (#1e8449)
-                        ctx.fillStyle = isOnWater ? '#2980b9' : '#1e8449';
-                        ctx.strokeStyle = '#000000';
-                        ctx.lineWidth = 2;
-
-                        ctx.beginPath();
-                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.stroke();
-                        ctx.restore();
-                    });
-                }
             }
             ctx.restore();
         }
