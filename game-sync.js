@@ -7,6 +7,7 @@ import { getRenderCoordinates } from './game-renderer.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
+let lastProcessedDestructionTime = 0; // Independent tracker for combat destructions
 let lastServerTurn = null;
 let isInitialSync = true; 
 
@@ -31,10 +32,14 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         if (match.lastAction && match.lastAction.timestamp > lastProcessedActionTime) {
             lastProcessedActionTime = match.lastAction.timestamp;
-            // Remote action sound trigger kept local
+            // Remote action sound tracker kept local
         }
 
-        if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedActionTime) {
+        // Fixed: Use independent lastProcessedDestructionTime so combat explosions trigger reliably for the defending player
+        if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedDestructionTime) {
+            lastProcessedDestructionTime = match.lastDestructions.timestamp;
+            
+            // Trigger combat animations and sounds for remote actions performed by the opponent
             if (match.lastAction && match.lastAction.team !== playerTeam) {
                 match.lastDestructions.events.forEach(evt => {
                     const canvas = document.getElementById('gameCanvas');
