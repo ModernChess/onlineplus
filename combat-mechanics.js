@@ -22,7 +22,7 @@ export const planeVulnerableUnits = new Set(['Tank', 'Infantry', 'Engineer', 'Ar
 export const shipVulnerableUnits = new Set(['Infantry', 'Tank', 'Anti-Air', 'Engineer', 'Artillery']);
 export const artilleryVulnerableUnits = new Set(['Ship', 'Infantry', 'Tank', 'Anti-Air', 'Engineer', 'Artillery']);
 export const antiairVulnerableUnits = new Set(['Plane']);
-export const mineLandVulnerableUnits = new Set(['Tank', 'Infantry', 'Anti-Air', 'Artillery', 'Engineer']);
+export const mineLandVulnerableUnits = new Set(['Tank', 'Infantry', 'Anti-Air', 'Artillery']); // Engineer removed from mine threats
 export const mineWaterVulnerableUnits = new Set(['Ship']);
 export const infantryTankVulnerableUnits = new Set(['Engineer', 'Artillery', 'Anti-Air']);
 
@@ -276,6 +276,27 @@ export function resolveCombat(unitsList, logCallback) {
         });
     });
 
+    // 5.5 Engineer-to-Mine Adjacency Dismantling/Destruction
+    let engineers = unitsList.filter(u => u.name === 'Engineer' && !u.stalemate && !stalematedUnits.has(u.id));
+    engineers.forEach(engineer => {
+        let enemyMines = unitsList.filter(u => u.name === 'Mine' && u.team !== engineer.team && !u.stalemate && !stalematedUnits.has(u.id));
+        enemyMines.forEach(mine => {
+            if (areUnitsAdjacent(engineer, mine)) {
+                if (!destroyedIds.has(mine.id)) {
+                    destroyedIds.add(mine.id);
+                    unitsToDestroy.push({
+                        unit: mine,
+                        destroyedBy: 'Engineer',
+                        reason: `Engineer (${engineer.team}) adjacently dismantled/destroyed enemy Mine (${mine.team})`
+                    });
+                    if (logCallback) {
+                        logCallback(`Combat! Engineer (${engineer.team}) dismantled and destroyed adjacent enemy Mine (${mine.team})!`);
+                    }
+                }
+            }
+        });
+    });
+
     // 6. Plane Adjacent Combat Resolution (including Plane-to-Plane mutual destruction)
     let planes = unitsList.filter(u => u.name === 'Plane' && !u.stalemate && !stalematedUnits.has(u.id));
     planes.forEach(planeA => {
@@ -405,7 +426,6 @@ export function resolveCombat(unitsList, logCallback) {
     });
 
     
-
 
 // 8. Ship-to-Ship Adjacent Mutual Destruction Check
     let shipsList = unitsList.filter(u => u.name === 'Ship' && !u.stalemate && !stalematedUnits.has(u.id));
