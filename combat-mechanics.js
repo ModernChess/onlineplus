@@ -416,72 +416,7 @@ export function resolveCombat(unitsList, logCallback) {
                                 reason: `Red superunit power (${suRed.power}) overpowered Blue superunit power (${suBlue.power})`
                             });
                             if (logCallback) {
- // 8. Ship-to-Ship Adjacent Mutual Destruction Check
-    let shipsList = unitsList.filter(u => u.name === 'Ship' && !u.stalemate && !stalematedUnits.has(u.id));
-    shipsList.forEach(shipA => {
-        let enemyShips = unitsList.filter(u => u.name === 'Ship' && u.team !== shipA.team && !u.stalemate && !stalematedUnits.has(u.id));
-        enemyShips.forEach(shipB => {
-            if (areUnitsAdjacent(shipA, shipB)) {
-                if (!destroyedIds.has(shipA.id)) {
-                    destroyedIds.add(shipA.id);
-                    unitsToDestroy.push({ 
-                        unit: shipA, destroyedBy: 'Ship Collision',
-                        reason: `Ship (${shipA.team}) touched adjacent enemy Ship (${shipB.team}) causing mutual destruction` 
-                    });
-                }
-                if (!destroyedIds.has(shipB.id)) {
-                    destroyedIds.add(shipB.id);
-                    unitsToDestroy.push({ 
-                        unit: shipB, destroyedBy: 'Ship Collision',
-                        reason: `Ship (${shipB.team}) touched adjacent enemy Ship (${shipA.team}) causing mutual destruction` 
-                    });
-                }
-                if (logCallback) {
-                    logCallback(`Combat! Ships from opposing teams collided at adjacency and mutually destroyed each other!`);
-                }
-            }
-        });
-    });
-
-    // 9. Infantry & Tank Adjacent Combat Resolution
-    let infantryAndTanks = unitsList.filter(u => (u.name === 'Infantry' || u.name === 'Tank') && !u.stalemate && !stalematedUnits.has(u.id));
-    infantryAndTanks.forEach(attacker => {
-        let enemyUnits = unitsList.filter(u => u.team !== attacker.team);
-        enemyUnits.forEach(enemy => {
-            if (infantryTankVulnerableUnits.has(enemy.name)) {
-                if (areUnitsAdjacent(attacker, enemy)) {
-                    if (!destroyedIds.has(enemy.id) && !enemy.stalemate && !stalematedUnits.has(enemy.id)) {
-                        destroyedIds.add(enemy.id);
-                        unitsToDestroy.push({ 
-                            unit: enemy, destroyedBy: attacker.name,
-                            reason: `${attacker.name} (${attacker.team}) adjacently engaged and destroyed vulnerable enemy unit ${enemy.name} (${enemy.team})` 
-                        });
-                        if (logCallback) {
-                            logCallback(`Combat! ${attacker.name} (${attacker.team}) engaged and destroyed adjacent enemy ${enemy.name} (${enemy.team})!`);
-                        }
-                    }
-                }
-            }
-        });
-    });
-
-    return unitsToDestroy.length > 0;
-}
-
-export function processDestructions(unitsList) {
-    if (unitsToDestroy.length === 0) return false;
-    let targetIds = new Set(unitsToDestroy.map(item => item.unit.id));
-
-    for (let i = unitsList.length - 1; i >= 0; i--) {
-        if (targetIds.has(unitsList[i].id)) {
-            let u = unitsList[i];
-            stalematedUnits.delete(u.id);
-            unitsList.splice(i, 1);
-        }
-    }
-    updateStalemates(unitsList);
-    return true;
-}                               logCallback(`Combat! Red superunit (power ${suRed.power}) destroyed Blue ${u.name} (cluster power ${suBlue.power})!`);
+                                logCallback(`Combat! Red superunit (power ${suRed.power}) destroyed Blue ${u.name} (cluster power ${suBlue.power})!`);
                             }
                         }
                     });
