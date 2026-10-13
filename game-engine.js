@@ -468,12 +468,7 @@ function initCanvasGame() {
             clickedRow = rows - 1 - clickedRow;
         }
 
-        
-
-
-
-
-if (getPendingUnitType()) {
+  if (getPendingUnitType()) {
             let placed = handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, currentMatchId, logToConsole, teamCoins, () => updateGlobalCoinHUD(teamCoins));
             if (placed) {
                 cleanupUnitDeployerPopup();
@@ -761,4 +756,11 @@ if (getPendingUnitType()) {
             clearArtilleryButtons();
         }
     };
-}
+}      
+
+
+
+
+
+
+ 
