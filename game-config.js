@@ -48,7 +48,7 @@ loadOnlineAsset(`${repoBaseUrl}blueship.png`, blueShipImg, (val) => { blueShipLo
 loadOnlineAsset(`${repoBaseUrl}redship.png`, redShipImg, (val) => { redShipLoaded = val; });
 loadOnlineAsset(`${repoBaseUrl}bluetank.png`, blueTankImg, (val) => { blueTankLoaded = val; });
 loadOnlineAsset(`${repoBaseUrl}redtank.png`, redTankImg, (val) => { redTankLoaded = val; });
-loadOnlineAsset(`${repoBaseUrl}map16.png`, mapImg, (val) => { mapLoaded = val; });
+loadOnlineAsset(`${repoBaseUrl}map25.png`, mapImg, (val) => { mapLoaded = val; });
 
 export function colLetterToIndex(colStr) {
     let upper = colStr.toUpperCase();
