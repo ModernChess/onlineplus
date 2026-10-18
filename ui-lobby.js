@@ -1,19 +1,26 @@
-// ui-lobby.js - Handles Lobby, Matchmaking, and Server Management via Shared Cache (OnlinePlus Version)
-import { db, ref, set, get, update, remove, onValue, push, setupUserPresence, markUserOffline } from './network.js';
+// ui-lobby.js - Handles Lobby Entry, Authentication Cache, and Core Event Listeners (Optimized for Ultra-Fast Loading)
+import { db, ref, set, get, update, remove, push, onValue, setupUserPresence } from './network.js';
 import { startGameSession } from './game-engine.js';
-import { spawnTeamUnits } from './game-config.js';
+import { initNetworkMonitor } from './network-monitor.js';
 import { 
     currentUser, currentServerId, currentMatchId, playerTeam, isLeavingDeliberately,
     setCurrentUser, setCurrentServerId, setCurrentMatchId, setPlayerTeam, setIsLeavingDeliberately,
     logToConsole, showScreen, listenToActivePlayers, listenToGlobalChat, sendGlobalMessage 
 } from './ui-auth.js';
+import { 
+    showLoadingOverlay, hideLoadingOverlay, backgroundCheckActiveMatch, 
+    listenToGlobalMatchesForTerminations, leaveMatchCompletely 
+} from './ui-lobby-2.js';
+import { loadServerList } from './ui-lobby-3.js';
+import { compressImageToThumbnail } from './image-compressor.js';
 
 export function initLobbyModule() {
     initEventListeners();
     checkCachedSession();
     listenToActivePlayers();
     listenToGlobalChat();
-    listenToGlobalMatchesForTerminations();
+    listenToGlobalMatchesForTerminations(loadServerList);
+    initNetworkMonitor();
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
@@ -59,37 +66,46 @@ export function initLobbyModule() {
     });
 }
 
-function checkCachedSession() {
+async function checkCachedSession() {
     const savedUser = localStorage.getItem('arena_chess_user');
     
     if (savedUser) {
         setCurrentUser(savedUser);
         logToConsole(`Auto-logged in via home cache as: ${savedUser}`);
         
-        setupUserPresence(savedUser);
+        // Render UI instantly from local cache before background checks finish
         showScreen('lobby-screen');
+        loadServerList();
+        backgroundCheckActiveMatch(loadServerList); 
+
+        setupUserPresence(savedUser);
         
-        const avatar = localStorage.getItem('arena_chess_avatar') || '😀';
+        let rawAvatar = localStorage.getItem(`chess_campaign_avatar_${savedUser}`) || localStorage.getItem(`arena_chess_avatar_${savedUser}`) || localStorage.getItem('arena_chess_avatar') || '😀';
         const faction = localStorage.getItem('arena_chess_faction') || 'Order';
         const rank = localStorage.getItem('arena_chess_rank') || 'Grandmarshall (1st Class 🌟🌟🌟)';
         const factionColor = faction === 'Order' ? 'var(--secondary)' : 'var(--accent)';
         
         const welcomeUser = document.getElementById('welcomeUser');
         if (welcomeUser) {
-            welcomeUser.innerHTML = `<span style="font-size: 1.1rem; margin-right: 4px; vertical-align: middle;">${avatar}</span> <span style="color: ${factionColor}; font-weight: 600;">[${faction} • ${rank}]</span> Logged in as: <strong>${savedUser}</strong>`;
+            const avatarHTML = (rawAvatar && (rawAvatar.startsWith('data:image/') || rawAvatar.startsWith('http')))
+                ? `<img src="${rawAvatar}" style="width: 26px; height: 26px; min-width: 26px; min-height: 26px; aspect-ratio: 1 / 1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 4px;">`
+                : `<span style="font-size: 1.1rem; margin-right: 4px; vertical-align: middle;">${rawAvatar}</span>`;
+
+            welcomeUser.innerHTML = `${avatarHTML} <span style="color: ${factionColor}; font-weight: 600;">[${faction} • ${rank}]</span> Logged in as: <strong>${savedUser}</strong>`;
         }
         
         const adminClearBtn = document.getElementById('adminClearBtn');
         if (adminClearBtn) {
-            if (savedUser.toLowerCase() === 'testaccount3') {
-                adminClearBtn.style.display = 'block';
-            } else {
-                adminClearBtn.style.display = 'none';
-            }
+            adminClearBtn.style.display = (savedUser.toLowerCase() === 'testaccount3') ? 'block' : 'none';
         }
 
-        loadServerList();
-        checkForActiveMatchOnLogin();
+        // Asynchronously compress/cache avatar in background without blocking UI render
+        compressImageToThumbnail(rawAvatar, 64, 64, 0.5).then(avatar => {
+            if (avatar !== rawAvatar) {
+                localStorage.setItem(`chess_campaign_avatar_${savedUser}`, avatar);
+            }
+        }).catch(err => console.error("Avatar compression background task failed:", err));
+
     } else {
         logToConsole("No active session in cache. Showing login screen.");
         showScreen('login-screen');
@@ -99,7 +115,7 @@ function checkCachedSession() {
 function initEventListeners() {
     const loginBtn = document.getElementById('loginBtn');
     if (loginBtn) {
-        loginBtn.addEventListener('click', () => {
+        loginBtn.addEventListener('click', async () => {
             const u = document.getElementById('userInput').value.trim();
             const p = document.getElementById('passInput').value.trim();
             const err = document.getElementById('loginError');
@@ -116,28 +132,35 @@ function initEventListeners() {
             setupUserPresence(u);
 
             showScreen('lobby-screen');
-            const avatar = localStorage.getItem('arena_chess_avatar') || '😀';
-            const faction = localStorage.getItem('arena_chess_avatar') || 'Order';
+            loadServerList();
+            backgroundCheckActiveMatch(loadServerList); 
+            
+            let rawAvatar = localStorage.getItem(`chess_campaign_avatar_${u}`) || localStorage.getItem(`arena_chess_avatar_${u}`) || localStorage.getItem('arena_chess_avatar') || '😀';
+            const faction = localStorage.getItem('arena_chess_faction') || 'Order';
             const rank = localStorage.getItem('arena_chess_rank') || 'Grandmarshall (1st Class 🌟🌟🌟)';
             const factionColor = faction === 'Order' ? 'var(--secondary)' : 'var(--accent)';
             
             const welcomeUser = document.getElementById('welcomeUser');
             if (welcomeUser) {
-                welcomeUser.innerHTML = `<span style="font-size: 1.1rem; margin-right: 4px; vertical-align: middle;">${avatar}</span> <span style="color: ${factionColor}; font-weight: 600;">[${faction} • ${rank}]</span> Logged in as: <strong>${u}</strong>`;
+                const avatarHTML = (rawAvatar && (rawAvatar.startsWith('data:image/') || rawAvatar.startsWith('http')))
+                    ? `<img src="${rawAvatar}" style="width: 26px; height: 26px; min-width: 26px; min-height: 26px; aspect-ratio: 1 / 1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 4px;">`
+                    : `<span style="font-size: 1.1rem; margin-right: 4px; vertical-align: middle;">${rawAvatar}</span>`;
+
+                welcomeUser.innerHTML = `${avatarHTML} <span style="color: ${factionColor}; font-weight: 600;">[${faction} • ${rank}]</span> Logged in as: <strong>${u}</strong>`;
             }
             
             const adminClearBtn = document.getElementById('adminClearBtn');
             if (adminClearBtn) {
-                if (u.toLowerCase() === 'testaccount3') {
-                    adminClearBtn.style.display = 'block';
-                } else {
-                    adminClearBtn.style.display = 'none';
-                }
+                adminClearBtn.style.display = (u.toLowerCase() === 'testaccount3') ? 'block' : 'none';
             }
 
-            loadServerList();
-            checkForActiveMatchOnLogin();
             logToConsole(`User ${u} logged in successfully.`);
+
+            compressImageToThumbnail(rawAvatar, 64, 64, 0.5).then(avatar => {
+                if (avatar !== rawAvatar) {
+                    localStorage.setItem(`chess_campaign_avatar_${u}`, avatar);
+                }
+            }).catch(err => console.error("Avatar compression background task failed:", err));
         });
     }
 
@@ -151,6 +174,7 @@ function initEventListeners() {
                 remove(ref(db, `servers/${currentServerId}`));
                 setCurrentServerId(null);
             }
+            hideLoadingOverlay();
             showScreen('lobby-screen');
             logToConsole("Server creation canceled. Returned to lobby.");
         });
@@ -166,12 +190,6 @@ function initEventListeners() {
         });
     }
 
-    // Surrender functionality handled cleanly via game-controls.js without pop-up prompts[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span)
-    const surrenderBtn = document.getElementById('surrenderBtn');
-    if (surrenderBtn) {
-        // Cleared out confirmation prompt to ensure direct handling[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)
-    }
-
     const adminClearBtn = document.getElementById('adminClearBtn');
     if (adminClearBtn) {
         adminClearBtn.addEventListener('click', () => {
@@ -182,122 +200,24 @@ function initEventListeners() {
             if (confirm("Admin: Clear all active servers and matches?")) {
                 remove(ref(db, 'servers'));
                 remove(ref(db, 'matches_plus'));
-                logToConsole("Admin cleared all servers and matches.");
+                remove(ref(db, 'user_active_matches'));
+                logToConsole("Admin cleared all servers, matches, and pointers.");
             }
         });
     }
 }
 
-function checkForActiveMatchOnLogin() {
-    const matchesRef = ref(db, 'matches_plus');
-    get(matchesRef).then((snapshot) => {
-        const matches = snapshot.val() || {};
-        for (let mId in matches) {
-            const match = matches[mId];
-            if (match.status === 'active') {
-                if (match.blueUser === currentUser || match.redUser === currentUser) {
-                    showRejoinPopup(mId, match);
-                    break;
-                }
-            }
-        }
-    });
-}
-
-function listenToGlobalMatchesForTerminations() {
-    const matchesRef = ref(db, 'matches_plus');
-    onValue(matchesRef, (snapshot) => {
-        const matches = snapshot.val() || {};
-        for (let mId in matches) {
-            const match = matches[mId];
-            if (match.status === 'ended') {
-                const modal = document.getElementById('rejoinPopupModal');
-                if (modal && modal.dataset.matchId === mId) {
-                    modal.remove();
-                    logToConsole("Active match was terminated by opponent. Rejoin prompt cleared.");
-                }
-            }
-        }
-    });
-}
-
-function showRejoinPopup(mId, match) {
-    const existing = document.getElementById('rejoinPopupModal');
-    if (existing) existing.remove();
-
-    const isBlue = match.blueUser === currentUser;
-    const opponentName = isBlue ? match.redUser : match.blueUser;
-
-    const modal = document.createElement('div');
-    modal.id = 'rejoinPopupModal';
-    modal.dataset.matchId = mId;
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999;
-    `;
-
-    modal.innerHTML = `
-        <div style="background: #1e1e1e; padding: 25px; border-radius: 8px; text-align: center; max-width: 400px; width: 90%; border: 1px solid #333; color: #fff;">
-            <h3 style="margin-top: 0; color: #f1c40f;">Active Match Found!</h3>
-            <p style="color: #ccc; font-size: 0.9rem;">You have an ongoing match against <strong>${opponentName}</strong>. Would you like to rejoin or reject and terminate it?</p>
-            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
-                <button id="acceptRejoinBtn" class="btn btn-primary" style="background-color: #27ae60; flex: 1;">Rejoin Match</button>
-                <button id="rejectRejoinBtn" class="btn btn-secondary" style="background-color: #c0392b; flex: 1;">Reject & Terminate</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    document.getElementById('acceptRejoinBtn').onclick = () => {
-        modal.remove();
-        setCurrentMatchId(mId);
-        setPlayerTeam(isBlue ? 'blue' : 'red');
-
-        const afkField = isBlue ? 'blueAfk' : 'redAfk';
-        update(ref(db, `matches_plus/${mId}`), { [afkField]: false });
-
-        findServerIdForMatch(mId, () => {
-            startGameSession(mId, isBlue ? 'blue' : 'red', currentUser, () => {
-                setIsLeavingDeliberately(true);
-                leaveMatchCompletely();
-            });
-        });
-    };
-
-    document.getElementById('rejectRejoinBtn').onclick = () => {
-        modal.remove();
-        update(ref(db, `matches_plus/${mId}`), { status: 'ended', winner: isBlue ? 'red' : 'blue' });
-        
-        findServerIdForMatch(mId, (sId) => {
-            if (sId) {
-                remove(ref(db, `servers/${sId}`));
-            }
-        });
-
-        loadServerList();
-        logToConsole("Rejected and terminated active match.");
-    };
-}
-
-function findServerIdForMatch(mId, callback) {
-    const serversRef = ref(db, 'servers');
-    get(serversRef).then((snapshot) => {
-        const servers = snapshot.val() || {};
-        let foundSId = null;
-        for (let sId in servers) {
-            if (servers[sId].matchId === mId) {
-                foundSId = sId;
-                break;
-            }
-        }
-        if (callback) callback(foundSId);
-    });
-}
-
 function createNewServer() {
     if (!currentUser) return;
+    
+    const createServerBtn = document.getElementById('createServerBtn');
+    if (createServerBtn) {
+        createServerBtn.disabled = true;
+        createServerBtn.innerText = "Creating Server...";
+    }
+    
     setIsLeavingDeliberately(false);
+    
     const serversRef = ref(db, 'servers');
     const newServerRef = push(serversRef);
     setCurrentServerId(newServerRef.key);
@@ -307,172 +227,40 @@ function createNewServer() {
         guest: null,
         status: 'waiting',
         createdAt: Date.now()
+    }).then(() => {
+        if (createServerBtn) {
+            createServerBtn.disabled = false;
+            createServerBtn.innerText = "Create New Server";
+        }
+        
+        logToConsole(`Created server ID: ${currentServerId} by host ${currentUser} (Ready for opponents)`);
+        
+        const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+        if (roomCodeDisplay) roomCodeDisplay.innerText = `Server ID: ${currentServerId}`;
+        
+        showScreen('wait-screen');
+    }).catch((err) => {
+        if (createServerBtn) {
+            createServerBtn.disabled = false;
+            createServerBtn.innerText = "Create New Server";
+        }
+        console.error("Failed to create server:", err);
+        logToConsole("Error: Failed to initialize server room.");
     });
 
-    logToConsole(`Created server ID: ${currentServerId} by host ${currentUser}`);
-    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
-    if (roomCodeDisplay) roomCodeDisplay.innerText = `Server ID: ${currentServerId}`;
-    showScreen('wait-screen');
-
-    onValue(newServerRef, (snapshot) => {
+    onValue(newServerRef, async (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
         if (data.status === 'playing' && data.matchId) {
             setCurrentMatchId(data.matchId);
             setPlayerTeam('blue');
-            startGameSession(data.matchId, 'blue', currentUser, () => {
+
+            await set(ref(db, `user_active_matches/${currentUser}`), data.matchId);
+
+            startGameSession(data.matchId, 'blue', currentUser, async () => {
                 setIsLeavingDeliberately(true);
-                leaveMatchCompletely();
+                await leaveMatchCompletely(loadServerList);
             });
         }
     });
-}
-
-function loadServerList() {
-    const serversRef = ref(db, 'servers');
-    onValue(serversRef, (snapshot) => {
-        const serversData = snapshot.val() || {};
-        const matchesRef = ref(db, 'matches_plus');
-        
-        get(matchesRef).then((matchSnapshot) => {
-            const matchesData = matchSnapshot.val() || {};
-            const listEl = document.getElementById('serverList');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-
-            let totalServersCount = 0;
-            for (let sId in serversData) {
-                const server = serversData[sId];
-                
-                if (server.status === 'playing' && server.matchId) {
-                    const match = matchesData[server.matchId];
-                    if (!match || match.status === 'ended') {
-                        remove(ref(db, `servers/${sId}`));
-                        continue; 
-                    }
-                }
-
-                totalServersCount++;
-                const item = document.createElement('div');
-                item.className = 'server-item';
-
-                if (server.status === 'waiting') {
-                    item.innerHTML = `
-                        <span>Host: <strong>${server.host}</strong> (Waiting for opponent)</span>
-                        <button class="btn btn-secondary" onclick="window.joinServer('${sId}')">Join Match</button>
-                    `;
-                } else if (server.status === 'playing' && server.matchId) {
-                    const match = matchesData[server.matchId];
-                    let isUserInMatch = false;
-                    let isUserAfk = false;
-
-                    if (match) {
-                        if (match.blueUser === currentUser) {
-                            isUserInMatch = true;
-                            isUserAfk = match.blueAfk === true;
-                        } else if (match.redUser === currentUser) {
-                            isUserInMatch = true;
-                            isUserAfk = match.redAfk === true;
-                        }
-                    }
-
-                    if (isUserInMatch && isUserAfk) {
-                        item.innerHTML = `
-                            <span>Server [${server.host} vs ${server.guest}]: <strong style="color: #f1c40f;">You are AFK</strong></span>
-                            <button class="btn btn-primary" onclick="window.rejoinActiveMatch('${server.matchId}', '${sId}')" style="background-color: #27ae60;">Rejoin Match</button>
-                        `;
-                    } else {
-                        item.innerHTML = `
-                            <span>Server [${server.host} vs ${server.guest}]: <strong style="color: #e74c3c;">Match Ongoing</strong></span>
-                            <button class="btn btn-secondary" disabled style="opacity: 0.6; cursor: not-allowed;">In Progress</button>
-                        `;
-                    }
-                }
-                listEl.appendChild(item);
-            }
-
-            if (totalServersCount === 0) {
-                listEl.innerHTML = `<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; margin-top:20px;">No servers active. Create one!</div>`;
-            }
-        });
-    });
-}
-
-window.joinServer = function(sId) {
-    if (!currentUser) return;
-    setIsLeavingDeliberately(false);
-    setCurrentServerId(sId);
-    const serverRef = ref(db, `servers/${sId}`);
-
-    get(serverRef).then((snapshot) => {
-        const server = snapshot.val();
-        if (!server || server.status !== 'waiting') {
-            alert("This server is no longer available.");
-            return;
-        }
-
-        const matchesRef = ref(db, 'matches_plus');
-        const newMatchRef = push(matchesRef);
-        const mId = newMatchRef.key;
-        setCurrentMatchId(mId);
-
-        let initialUnits = [];
-        spawnTeamUnits('blue', initialUnits);
-        spawnTeamUnits('red', initialUnits);
-
-        set(newMatchRef, {
-            blueUser: server.host,
-            redUser: currentUser,
-            turn: 'blue',
-            status: 'active',
-            units: initialUnits,
-            blueAfk: false,
-            redAfk: false
-        });
-
-        update(serverRef, {
-            guest: currentUser,
-            status: 'playing',
-            matchId: mId
-        });
-
-        setPlayerTeam('red');
-        logToConsole(`Joined server ${sId}. Match ID: ${mId}`);
-        startGameSession(mId, 'red', currentUser, () => {
-            setIsLeavingDeliberately(true);
-            leaveMatchCompletely();
-        });
-    });
-};
-
-window.rejoinActiveMatch = function(mId, sId) {
-    setCurrentMatchId(mId);
-    setCurrentServerId(sId);
-
-    get(ref(db, `matches_plus/${mId}`)).then((snapshot) => {
-        const match = snapshot.val();
-        if (!match) return;
-
-        const isUserBlue = match.blueUser === currentUser;
-        setPlayerTeam(isUserBlue ? 'blue' : 'red');
-
-        const afkField = isUserBlue ? 'blueAfk' : 'redAfk';
-        update(ref(db, `matches_plus/${mId}`), { [afkField]: false });
-
-        startGameSession(mId, isUserBlue ? 'blue' : 'red', currentUser, () => {
-            setIsLeavingDeliberately(true);
-            leaveMatchCompletely();
-        });
-    });
-};
-
-function leaveMatchCompletely() {
-    if (currentServerId) {
-        remove(ref(db, `servers/${currentServerId}`));
-    }
-    setCurrentMatchId(null);
-    setCurrentServerId(null);
-    showScreen('lobby-screen');
-    loadServerList();
-    logToConsole("Left active session screen.");
 }
