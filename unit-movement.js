@@ -2,6 +2,7 @@
 import { cols, rows, getTerrain, isWaterTerrain } from './game-config.js';
 import { getRenderCoordinates } from './game-renderer.js';
 import { stalematedUnits } from './combat-mechanics.js';
+import { getCameraState } from './viewport.js';
 
 const activeRangeUnitIds = new Set();
 
@@ -27,7 +28,7 @@ export function getUnitRange(unit) {
         return 0;
     }
     if (unit.name === 'Artillery') {
-        return 3; // Fixed: Artillery range set to 3 to activate R and D buttons
+        return 3; // Artillery range set to 3 to activate R and D buttons
     }
     if (unit.name === 'Engineer' || unit.name === 'Mine') {
         return 1;
@@ -54,6 +55,13 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
     let scaleX = canvas.clientWidth / canvas.width;
     let scaleY = canvas.clientHeight / canvas.height;
 
+    // Incorporate camera panning and zoom transformations
+    let cam = getCameraState ? getCameraState() : { zoom: 1, x: 0, y: 0 };
+    let worldX = (renderPos.x * cam.zoom) + (cam.x || 0);
+    let worldY = (renderPos.y * cam.zoom) + (cam.y || 0);
+    let screenX = worldX * scaleX;
+    let screenY = worldY * scaleY;
+
     let btn = document.createElement('button');
     btn.id = 'activeUnitRangeBtn';
     btn.className = 'unit-range-btn';
@@ -63,14 +71,14 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
     const isCurrentlyOn = activeRangeUnitIds.has(selectedUnit.id);
     if (isCurrentlyOn) {
         btn.style.backgroundColor = '#27ae60';
-        btn.style.color = '#fff';
     }
 
-    let leftPx = (renderPos.x - 18) * scaleX;
-    let topPx = (renderPos.y - 18) * scaleY;
+    // Increased offsets further away from the unit to prevent crowding
+    let offsetX = -36 * (cam.zoom || 1);
+    let offsetY = -42 * (cam.zoom || 1);
 
-    btn.style.left = `${leftPx}px`;
-    btn.style.top = `${topPx}px`;
+    btn.style.left = `${screenX + offsetX}px`;
+    btn.style.top = `${screenY + offsetY}px`;
 
     btn.onclick = (e) => {
         e.stopPropagation();
@@ -78,10 +86,8 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
         
         if (newState) {
             btn.style.backgroundColor = '#27ae60';
-            btn.style.color = '#fff';
         } else {
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
+            btn.style.backgroundColor = '#2980b9';
         }
 
         if (logCallback) {
