@@ -1,4 +1,4 @@
-// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, and Sleek Turn Status Banner (OnlinePlus Version)
+// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, XP Bar, and Sleek Turn Status Banner
 import { db, ref, update } from './network.js';
 import { clearUnitRangeOverlayButton } from './unit-movement.js';
 
@@ -22,7 +22,6 @@ export function updateTurnButtonState(currentTurn, playerTeam) {
     }
 }
 
-// Ensures the sleek top HUD bar (Coins, Turn Status, and Live Timer) exists
 export function ensureCoinHudBar() {
     if (document.getElementById('coinDisplayBar')) return;
     
@@ -125,6 +124,37 @@ export function ensureCoinHudBar() {
                 border-radius: 4px;
                 letter-spacing: 1px;
             }
+            /* XP Display Frame Styles */
+            .xp-bar-frame {
+                position: relative;
+                background: rgba(15, 15, 22, 0.9);
+                border: 1px solid rgba(155, 89, 182, 0.6);
+                border-radius: 8px;
+                padding: 6px 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0,0,0,0.3);
+                overflow: hidden;
+            }
+            .xp-text-label {
+                font-weight: 800;
+                font-size: 12px;
+                color: #d8b4fe;
+                text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+                z-index: 2;
+                letter-spacing: 0.5px;
+            }
+            .xp-progress-track {
+                position: absolute;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: 0%;
+                background: linear-gradient(90deg, rgba(142, 68, 173, 0.6), rgba(155, 89, 182, 0.9));
+                transition: width 0.4s ease-out;
+                z-index: 1;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -133,6 +163,11 @@ export function ensureCoinHudBar() {
     hudContainer.id = 'coinDisplayBar';
     hudContainer.className = 'game-top-hud';
     hudContainer.innerHTML = `
+        <div id="xpDisplayFrame" class="xp-bar-frame">
+            <div id="xpProgressTrack" class="xp-progress-track"></div>
+            <span class="xp-text-label">PLAYER XP: <strong id="playerXpText" style="color: #fff;">0 XP</strong></span>
+            <span id="playerXpLevelTag" class="xp-text-label" style="font-size: 11px; opacity: 0.85;">LVL 1</span>
+        </div>
         <div id="turnStatusBanner" class="turn-status-banner turn-status-blue">
             <span>⚔️ Turn:</span> 
             <span id="turnTeamText">BLUE</span> 
@@ -143,7 +178,7 @@ export function ensureCoinHudBar() {
                 <span class="coin-icon">C</span> Blue: <span id="blueCoinCount">0</span>
             </div>
             <div class="turn-timer-widget">
-                ⏳ <span id="turnTimerClock">30s</span>
+                ⏳ <span id="turnTimerClock">60s</span>
             </div>
             <div class="team-coin-widget red-team-frame">
                 <span class="coin-icon">C</span> Red: <span id="redCoinCount">0</span>
@@ -151,6 +186,22 @@ export function ensureCoinHudBar() {
         </div>
     `;
     canvasContainer.parentNode.insertBefore(hudContainer, canvasContainer);
+}
+
+export function updateXpDisplay(currentXp = 0) {
+    ensureCoinHudBar();
+    const xpText = document.getElementById('playerXpText');
+    const xpTrack = document.getElementById('xpProgressTrack');
+    const xpLevelTag = document.getElementById('playerXpLevelTag');
+
+    if (xpText) xpText.innerText = `${currentXp} XP`;
+    
+    // Level calculation (100 XP per level)
+    const level = Math.floor(currentXp / 100) + 1;
+    const progressInLevel = currentXp % 100;
+    
+    if (xpLevelTag) xpLevelTag.innerText = `LVL ${level}`;
+    if (xpTrack) xpTrack.style.width = `${Math.min(100, progressInLevel)}%`;
 }
 
 export function updateCoinHud(teamCoins) {
@@ -166,7 +217,6 @@ export function updateCoinHud(teamCoins) {
 
 export const updateGlobalCoinHUD = updateCoinHud;
 
-// Sleek updater for the prominent turn banner
 export function updateTurnStatusBanner(currentTurn, playerName = '') {
     ensureCoinHudBar();
     const banner = document.getElementById('turnStatusBanner');
@@ -202,7 +252,6 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
 
     const surrenderBtn = document.getElementById('surrenderBtn');
     if (surrenderBtn) {
-        // Direct surrender binding without browser confirmation pop-ups
         surrenderBtn.onclick = () => {
             if (matchIdRef.current) {
                 update(ref(db, `matches_plus/${matchIdRef.current}`), {
@@ -244,6 +293,7 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
             changeTurnBtn.id = 'changeTurnBtn';
             changeTurnBtn.className = 'btn btn-secondary';
             changeTurnBtn.style.backgroundColor = '#9b59b6';
+            changeTurnBtn.style.icon = '⚡';
             changeTurnBtn.style.color = '#fff';
             changeTurnBtn.style.marginLeft = '10px';
             changeTurnBtn.innerText = 'Change Turn';
@@ -255,11 +305,15 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
                 logToConsole("Manual turn change triggered via Change Turn button.");
                 movedUnitsThisTurn.clear();
                 let nextTurn = teamRef.current === 'blue' ? 'red' : 'blue';
+                let newTurnStartTime = Date.now();
                 turnRef.current = nextTurn;
                 updateTurnStateCallback();
 
                 if (matchIdRef.current) {
-                    update(ref(db, `matches_plus/${matchIdRef.current}`), { turn: nextTurn });
+                    update(ref(db, `matches_plus/${matchIdRef.current}`), { 
+                        turn: nextTurn,
+                        turnStartTime: newTurnStartTime 
+                    });
                 }
             };
             surrenderBtn.parentNode.insertBefore(changeTurnBtn, document.getElementById('afkBtn').nextSibling);
@@ -277,9 +331,11 @@ export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnits
             buyUnitsBtn.onclick = () => {
                 const modal = document.getElementById('buyUnitsModal');
                 if (modal) {
+                    modal.style.display = 'flex';
                     buyUnitsBtn.disabled = true;
                     buyUnitsBtn.classList.add('btn-frozen');
-                    modal.style.display = 'flex';
+                } else {
+                    window.dispatchEvent(new CustomEvent('openBuyUnitsShop'));
                 }
             };
             surrenderBtn.parentNode.insertBefore(buyUnitsBtn, document.getElementById('changeTurnBtn').nextSibling);
