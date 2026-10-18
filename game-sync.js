@@ -1,5 +1,5 @@
 // game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes (OnlinePlus Version)
-import { db, ref, update, onValue, off, push } from './network.js';
+import { db, ref, update, get, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { updateTurnStatusBanner } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
@@ -7,17 +7,24 @@ import { getRenderCoordinates } from './game-renderer.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
-let lastProcessedDestructionTime = 0; // Independent tracker for combat destructions
+let lastProcessedDestructionTime = 0;
 let lastServerTurn = null;
 let isInitialSync = true; 
 
 export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logToConsole, onMatchEnded, onTurnChanged, tileCapturesRef = null) {
     if (!currentMatchId) return null;
+
+    const banner = document.getElementById('statusBanner');
+    if (banner && !banner.dataset.loaded) {
+        banner.innerHTML = `<div style="text-align:center; padding:8px; color:var(--text-muted); font-size:0.75rem;"><div class="inline-spinner" style="display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,0.2); border-top-color:var(--secondary); border-radius:50%; animation: spin 0.8s linear infinite; margin-right:6px; vertical-align:middle;"></div>Loading Match Status...</div>`;
+    }
+
     const matchRef = ref(db, `matches_plus/${currentMatchId}`);
     
-    const unsubscribe = onValue(matchRef, (snapshot) => {
+    const unsubscribe = onValue(matchRef, async (snapshot) => {
         const match = snapshot.val();
         if (!match) return;
+        if (banner) banner.dataset.loaded = "true";
         
         const isMyTurn = match.turn === playerTeam;
         const serverTurnChanged = !isInitialSync && match.turn && match.turn !== lastServerTurn;
@@ -32,14 +39,11 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         if (match.lastAction && match.lastAction.timestamp > lastProcessedActionTime) {
             lastProcessedActionTime = match.lastAction.timestamp;
-            // Remote action sound tracker kept local
         }
 
-        // Fixed: Use independent lastProcessedDestructionTime so combat explosions trigger reliably for the defending player
         if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedDestructionTime) {
             lastProcessedDestructionTime = match.lastDestructions.timestamp;
             
-            // Trigger combat animations and sounds for remote actions performed by the opponent
             if (match.lastAction && match.lastAction.team !== playerTeam) {
                 match.lastDestructions.events.forEach(evt => {
                     const canvas = document.getElementById('gameCanvas');
@@ -118,11 +122,41 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         isInitialSync = false;
         
-        let myUserName = playerTeam === 'blue' ? (match.blueUser || 'Blue Player') : (match.redUser || 'Opponent');
-        let opponentName = playerTeam === 'blue' ? (match.redUser || 'Opponent') : (match.blueUser || 'Opponent');
-        let opponentIsAfk = playerTeam === 'blue' ? match.redAfk : match.redAfk;
+        let blueName = match.blueUser || 'Blue Player';
+        let redName = match.redUser || 'Red Player';
+        let opponentIsAfk = playerTeam === 'blue' ? match.redAfk : match.blueAfk;
 
-        const banner = document.getElementById('statusBanner');
+        // Fetch distinct avatars directly from game_presence for both blueUser and redUser
+        let blueAvatar = match.blueAvatar;
+        if (!blueAvatar || blueAvatar === '😀') {
+            const blueSnap = await get(ref(db, `game_presence/${blueName}`));
+            if (blueSnap.exists() && blueSnap.val().avatar) {
+                blueAvatar = blueSnap.val().avatar;
+            } else {
+                blueAvatar = localStorage.getItem(`chess_campaign_avatar_${blueName}`) || '😀';
+            }
+        }
+
+        let redAvatar = match.redAvatar;
+        if (!redAvatar || redAvatar === '😀') {
+            const redSnap = await get(ref(db, `game_presence/${redName}`));
+            if (redSnap.exists() && redSnap.val().avatar) {
+                redAvatar = redSnap.val().avatar;
+            } else {
+                redAvatar = localStorage.getItem(`chess_campaign_avatar_${redName}`) || '😀';
+            }
+        }
+
+        let myName = playerTeam === 'blue' ? blueName : redName;
+        let opponentName = playerTeam === 'blue' ? redName : blueName;
+
+        const renderAvatarHTML = (avatar) => {
+            if (avatar && (avatar.startsWith('data:image/') || avatar.startsWith('http'))) {
+                return `<img src="${avatar}" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255,255,255,0.3);">`;
+            }
+            return `<span style="font-size: 1rem; vertical-align: middle; margin-right: 6px;">${avatar || '😀'}</span>`;
+        };
+
         if (match.status === 'ended') {
             if (banner) {
                 banner.innerHTML = `<div style="background: #2c3e50; color: #f1c40f; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center;">Match Ended! Winner: ${match.winner ? match.winner.toUpperCase() : 'Draw'}</div>`;
@@ -137,15 +171,15 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                 }, 4000);
             }
         } else {
-            let activePlayerName = isMyTurn ? myUserName : opponentName;
+            let activePlayerName = isMyTurn ? myName : opponentName;
             updateTurnStatusBanner(match.turn, activePlayerName);
 
             let bannerHTML = `
-                <div class="battle-vs-container">
-                    <div class="battle-vs-box">
-                        <span>${myUserName}</span>
-                        <span class="vs-badge">VS</span>
-                        <span>${opponentName}</span>
+                <div class="battle-vs-container" style="display: flex; align-items: center; justify-content: center;">
+                    <div class="battle-vs-box" style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: flex; align-items: center;">${renderAvatarHTML(blueAvatar)}<strong>${blueName}</strong></span>
+                        <span class="vs-badge" style="padding: 0 6px; font-weight: bold; color: #f1c40f;">VS</span>
+                        <span style="display: flex; align-items: center;">${renderAvatarHTML(redAvatar)}<strong>${redName}</strong></span>
                     </div>
                 </div>
             `;
@@ -169,6 +203,12 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
 
 export function listenToMatchChat(currentMatchId, currentUser) {
     if (!currentMatchId) return;
+
+    const container = document.getElementById('chatMessages');
+    if (container && !container.dataset.loaded) {
+        container.innerHTML = `<div style="text-align:center; padding:15px; color:var(--text-muted); font-size:0.75rem;"><div class="inline-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.2); border-top-color:var(--secondary); border-radius:50%; animation: spin 0.8s linear infinite; margin-right:6px; vertical-align:middle;"></div>Connecting match chat...</div>`;
+    }
+
     const chatRef = ref(db, `matches_plus/${currentMatchId}/chat`);
     
     const sendBtn = document.getElementById('chatSend');
@@ -178,23 +218,47 @@ export function listenToMatchChat(currentMatchId, currentUser) {
         const newSendBtn = sendBtn.cloneNode(true);
         sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
 
-        newSendBtn.addEventListener('click', () => {
+        newSendBtn.addEventListener('click', async () => {
             const text = inputEl.value.trim();
             if (!text) return;
-            push(chatRef, { sender: currentUser, text: text, timestamp: Date.now() });
+            
+            const presenceSnap = await get(ref(db, `game_presence/${currentUser}`));
+            const userAvatar = (presenceSnap.exists() && presenceSnap.val().avatar)
+                ? presenceSnap.val().avatar
+                : (localStorage.getItem(`chess_campaign_avatar_${currentUser}`) || localStorage.getItem('arena_chess_avatar') || '😀');
+            
+            push(chatRef, { 
+                sender: currentUser, 
+                avatar: userAvatar,
+                text: text, 
+                timestamp: Date.now() 
+            });
             inputEl.value = '';
         });
     }
 
     onValue(chatRef, (snapshot) => {
         const data = snapshot.val() || {};
-        const container = document.getElementById('chatMessages');
         if (!container) return;
+        container.dataset.loaded = "true";
         container.innerHTML = '';
+        
         Object.values(data).forEach(msg => {
+            const msgAvatar = msg.avatar || '😀';
+            const avatarHTML = (msgAvatar && (msgAvatar.startsWith('data:image/') || msgAvatar.startsWith('http')))
+                ? `<img src="${msgAvatar}" class="chat-user-avatar" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255, 255, 255, 0.25);">`
+                : `<span class="chat-user-emoji" style="font-size: 1rem; vertical-align: middle; margin-right: 6px;">${msgAvatar}</span>`;
+
             const div = document.createElement('div');
             div.className = 'chat-msg';
-            div.innerHTML = `<strong>${msg.sender}:</strong> ${escapeHtml(msg.text)}`;
+            div.style.cssText = 'display: flex; align-items: center; margin-bottom: 6px; word-break: break-word;';
+            div.innerHTML = `
+                <div style="display: flex; align-items: center; flex-shrink: 0;">
+                    ${avatarHTML}
+                    <strong style="color: var(--secondary); margin-right: 4px;">${msg.sender}:</strong>
+                </div>
+                <div style="flex-grow: 1;">${escapeHtml(msg.text)}</div>
+            `;
             container.appendChild(div);
         });
         container.scrollTop = container.scrollHeight;
