@@ -9,12 +9,13 @@ import { updateTurnButtonState, updateGlobalCoinHUD, updateTurnTimerDisplay, upd
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { checkVictoryConditions } from './game-victory.js';
 
-export let turnStartTime = Date.now();
 export let serverTimeOffset = 0; 
 export let turnTimerInterval = null;
 export let coinIncomeInterval = null;
 export const TURN_TIME_LIMIT_MS = 60000;
 export let playerXp = 0;
+
+window.activeTurnStartTime = Date.now();
 
 export function setPlayerXp(val) {
     playerXp = val;
@@ -111,7 +112,6 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
             teamCoins[attackerTeam] = parseFloat(((teamCoins[attackerTeam] || 0) + 1.5).toFixed(1));
             teamCoins[defenderTeam] = parseFloat(Math.max(0, (teamCoins[defenderTeam] || 0) - 1.0).toFixed(1));
 
-            // Increase Player XP on unit destruction (+25 XP) and sync to Firebase & localStorage
             if (attackerTeam === localTeam) {
                 let currentUsername = localStorage.getItem('arena_chess_user');
                 playerXp += 25;
@@ -176,10 +176,27 @@ export function startTurnTimer(matchIdRef, playerTeam, currentTurnRef, movedUnit
         let isGameOver = window.isGameOverState || false;
         if (isGameOver) return;
 
-        let elapsed = getSyncedNow() - turnStartTime;
+        // Ensure activeTurnStartTime defaults safely if uninitialized
+        if (!window.activeTurnStartTime) {
+            window.activeTurnStartTime = getSyncedNow();
+        }
+
+        // Strictly calculate elapsed duration using centralized server time
+        let syncedNow = getSyncedNow();
+        let elapsed = syncedNow - window.activeTurnStartTime;
+        
+        // Strict bounds clamping to prevent weird offset values over 60s or below 0s
+        if (elapsed < 0) {
+            window.activeTurnStartTime = syncedNow; // Self-correct if local clock is ahead of server
+            elapsed = 0;
+        }
+
         let timeLeftSec = Math.ceil((TURN_TIME_LIMIT_MS - elapsed) / 1000);
+        timeLeftSec = Math.max(0, Math.min(60, timeLeftSec)); // Hard clamp between 0 and 60 seconds
+
         updateTurnTimerDisplay(timeLeftSec);
 
+        // Only the current player triggers the automatic turn shift when time expires
         if (elapsed >= TURN_TIME_LIMIT_MS && currentTurnRef.current === playerTeam) {
             logToConsole(`Turn time limit (60s) reached! Automatically changing turn.`);
             movedUnitsThisTurn.clear();
@@ -189,7 +206,7 @@ export function startTurnTimer(matchIdRef, playerTeam, currentTurnRef, movedUnit
             let nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
             let newTurnStartTime = getSyncedNow();
             currentTurnRef.current = nextTurn;
-            turnStartTime = newTurnStartTime;
+            window.activeTurnStartTime = newTurnStartTime;
             updateTurnButtonState(nextTurn, playerTeam);
 
             if (typeof onTurnTimeout === 'function') {
