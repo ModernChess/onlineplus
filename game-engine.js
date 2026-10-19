@@ -13,7 +13,7 @@ import { startMatchMusic, stopMatchMusic } from './sound.js';
 import { initializeTileCapturesState } from './renderer-helpers-2.js';
 import { checkVictoryConditions } from './game-victory.js';
 import { 
-    turnStartTime, serverTimeOffset, turnTimerInterval, coinIncomeInterval, 
+    serverTimeOffset, turnTimerInterval, coinIncomeInterval, 
     setServerTimeOffset, getSyncedNow, clearArtilleryButtons, updateArtilleryButtons, 
     startTurnTimer, setPlayerXp 
 } from './game-engine-2.js';
@@ -97,6 +97,9 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 currentTurn = mData.turn;
                 lastSeenTurn = mData.turn;
                 updateTurnButtonState(currentTurn, playerTeam);
+            }
+            if (mData.turnStartTime) {
+                window.activeTurnStartTime = mData.turnStartTime;
             }
         }
     });
