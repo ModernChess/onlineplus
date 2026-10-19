@@ -46,6 +46,7 @@ export function initLobbyModule() {
         });
     }
 
+    // Clean up waiting server or flag AFK on unload
     window.addEventListener('beforeunload', () => {
         if (currentUser && currentMatchId && !isLeavingDeliberately) {
             const afkField = playerTeam === 'blue' ? 'blueAfk' : 'redAfk';
@@ -73,7 +74,6 @@ async function checkCachedSession() {
         setCurrentUser(savedUser);
         logToConsole(`Auto-logged in via home cache as: ${savedUser}`);
         
-        // Render UI instantly from local cache before background checks finish
         showScreen('lobby-screen');
         loadServerList();
         backgroundCheckActiveMatch(loadServerList); 
@@ -99,7 +99,6 @@ async function checkCachedSession() {
             adminClearBtn.style.display = (savedUser.toLowerCase() === 'testaccount3') ? 'block' : 'none';
         }
 
-        // Asynchronously compress/cache avatar in background without blocking UI render
         compressImageToThumbnail(rawAvatar, 64, 64, 0.5).then(avatar => {
             if (avatar !== rawAvatar) {
                 localStorage.setItem(`chess_campaign_avatar_${savedUser}`, avatar);
@@ -169,14 +168,16 @@ function initEventListeners() {
 
     const cancelRoomBtn = document.getElementById('cancelRoomBtn');
     if (cancelRoomBtn) {
-        cancelRoomBtn.addEventListener('click', () => {
+        cancelRoomBtn.addEventListener('click', async () => {
             if (currentServerId) {
-                remove(ref(db, `servers/${currentServerId}`));
+                // Instantly remove waiting server from database so host can't rejoin it
+                await remove(ref(db, `servers/${currentServerId}`));
                 setCurrentServerId(null);
             }
             hideLoadingOverlay();
             showScreen('lobby-screen');
-            logToConsole("Server creation canceled. Returned to lobby.");
+            loadServerList();
+            logToConsole("Server creation canceled and destroyed. Returned to lobby.");
         });
     }
 
@@ -201,6 +202,7 @@ function initEventListeners() {
                 remove(ref(db, 'servers'));
                 remove(ref(db, 'matches_plus'));
                 remove(ref(db, 'user_active_matches'));
+                loadServerList();
                 logToConsole("Admin cleared all servers, matches, and pointers.");
             }
         });
