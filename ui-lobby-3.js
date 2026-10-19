@@ -22,7 +22,6 @@ function setCreateServerButtonState(disabled, label = "Create New Server") {
     }
 }
 
-// Global targeted retry function for the server list
 window.retryServerListLoad = function() {
     loadServerList();
 };
@@ -38,7 +37,6 @@ export function loadServerList() {
         </div>
     `;
 
-    // Fail-safe timeout if server connection hangs for more than 4 seconds
     const timeoutId = setTimeout(() => {
         if (listEl.innerHTML.includes('Loading active sessions...')) {
             listEl.innerHTML = `
@@ -50,15 +48,20 @@ export function loadServerList() {
     }, 4000);
 
     const serversRef = ref(db, 'servers');
+    const matchesRef = ref(db, 'matches_plus');
     
-    onValue(serversRef, (snapshot) => {
-        clearTimeout(timeoutId);
-        const serversData = snapshot.val() || {};
-        renderServerListUI(serversData);
+    // Listen to both servers and matches to track AFK states and live rooms simultaneously
+    onValue(serversRef, (serverSnap) => {
+        onValue(matchesRef, (matchSnap) => {
+            clearTimeout(timeoutId);
+            const serversData = serverSnap.val() || {};
+            const matchesData = matchSnap.val() || {};
+            renderServerListUI(serversData, matchesData);
+        }, { onlyOnce: true });
     }, { onlyOnce: false });
 }
 
-function renderServerListUI(serversData) {
+function renderServerListUI(serversData, matchesData) {
     const listEl = document.getElementById('serverList');
     if (!listEl) return;
     
@@ -103,12 +106,10 @@ function renderServerListUI(serversData) {
         }
     }
 
+    // 1. Render Waiting Servers
     for (let sId in serversData) {
         const server = serversData[sId];
-        
-        if (server.status === 'initializing' || server.status !== 'waiting') {
-            continue;
-        }
+        if (server.status !== 'waiting') continue;
 
         totalItemsCount++;
         const item = document.createElement('div');
@@ -116,6 +117,29 @@ function renderServerListUI(serversData) {
         item.innerHTML = `
             <span>Host: <strong>${server.host}</strong> (Waiting for opponent)</span>
             <button class="btn btn-secondary" onclick="window.joinServer('${sId}')">Join Match</button>
+        `;
+        fragment.appendChild(item);
+    }
+
+    // 2. Render Public Ongoing Matches (with AFK indicators for others)
+    for (let mId in matchesData) {
+        const match = matchesData[mId];
+        if (!match || match.status !== 'active') continue;
+
+        // Skip if this is the current user's own active match (since it's already rendered above at the top)
+        if (activeMatchCache && activeMatchCache.mId === mId) continue;
+
+        totalItemsCount++;
+        const blueAfk = match.blueAfk ? `<span style="color: #e74c3c; font-weight: bold;">[${match.blueUser} AFK]</span>` : '';
+        const redAfk = match.redAfk ? `<span style="color: #e74c3c; font-weight: bold;">[${match.redUser} AFK]</span>` : '';
+        const afkStatusText = (blueAfk || redAfk) ? ` ${blueAfk} ${redAfk}` : '<span style="color: #27ae60;">(Live)</span>';
+
+        const item = document.createElement('div');
+        item.className = 'server-item';
+        item.style.borderLeft = '3px solid #f39c12';
+        item.innerHTML = `
+            <span>Match: <strong>${match.blueUser}</strong> vs <strong>${match.redUser}</strong>${afkStatusText}</span>
+            <span style="font-size: 0.75rem; color: #f39c12; font-weight: 600; padding: 4px 8px; background: rgba(243, 156, 18, 0.1); border-radius: 4px;">Ongoing</span>
         `;
         fragment.appendChild(item);
     }
@@ -148,12 +172,7 @@ window.rejoinActiveMatchFromList = async function(mId) {
         setPlayerTeam(isUserBlue ? 'blue' : 'red');
 
         const afkField = isUserBlue ? 'blueAfk' : 'redAfk';
-        const userAvatar = '😀'; 
-
-        update(ref(db, `matches_plus/${mId}`), { 
-            [afkField]: false,
-            [isUserBlue ? 'blueAvatar' : 'redAvatar']: userAvatar 
-        });
+        update(ref(db, `matches_plus/${mId}`), { [afkField]: false });
 
         findServerIdForMatch(mId, (sId) => {
             if (sId) setCurrentServerId(sId);
@@ -179,8 +198,8 @@ window.terminateActiveMatchFromList = async function(mId) {
         if (match) {
             const isBlue = match.blueUser === currentUser;
             update(ref(db, `matches_plus/${mId}`), { status: 'ended', winner: isBlue ? 'red' : 'blue' });
-            remove(ref(db, `user_active_matches/${match.blueUser}`));
-            remove(ref(db, `user_active_matches/${match.redUser}`));
+            if (match.blueUser) remove(ref(db, `user_active_matches/${match.blueUser}`));
+            if (match.redUser) remove(ref(db, `user_active_matches/${match.redUser}`));
         }
 
         findServerIdForMatch(mId, (sId) => {
@@ -212,6 +231,7 @@ window.joinServer = async function(sId) {
         if (!server || server.status !== 'waiting') {
             hideLoadingOverlay();
             alert("This server is no longer available.");
+            loadServerList();
             return;
         }
 
@@ -224,15 +244,12 @@ window.joinServer = async function(sId) {
         spawnTeamUnits('blue', initialUnits);
         spawnTeamUnits('red', initialUnits);
 
-        const hostAvatar = '😀';
-        const guestAvatar = '😀';
-
         await Promise.all([
             set(newMatchRef, {
                 blueUser: server.host,
                 redUser: currentUser,
-                blueAvatar: hostAvatar,
-                redAvatar: guestAvatar,
+                blueAvatar: '😀',
+                redAvatar: '😀',
                 turn: 'blue',
                 status: 'active',
                 units: initialUnits,
