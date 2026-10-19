@@ -1,9 +1,10 @@
 // game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes (OnlinePlus Version)
 import { db, ref, update, get, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
-import { updateTurnStatusBanner } from './game-controls.js';
+import { updateTurnStatusBanner, updateTurnTimerDisplay } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { getRenderCoordinates } from './game-renderer.js';
+import { getSyncedNow } from './game-engine-2.js';
 
 let matchEndTimeout = null;
 let lastProcessedActionTime = 0;
@@ -31,6 +32,14 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         
         if (match.turn) {
             lastServerTurn = match.turn;
+        }
+
+        // Forcefully update the global turn start time and reset timer UI immediately
+        if (match.turnStartTime) {
+            window.activeTurnStartTime = match.turnStartTime;
+            if (serverTurnChanged) {
+                updateTurnTimerDisplay(60); // Force UI clock to 60s right away
+            }
         }
 
         if (match.turn && onTurnChanged) {
@@ -126,7 +135,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         let redName = match.redUser || 'Red Player';
         let opponentIsAfk = playerTeam === 'blue' ? match.redAfk : match.blueAfk;
 
-        // Fetch distinct avatars directly from game_presence for both blueUser and redUser
         let blueAvatar = match.blueAvatar;
         if (!blueAvatar || blueAvatar === '😀') {
             const blueSnap = await get(ref(db, `game_presence/${blueName}`));
