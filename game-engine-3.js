@@ -43,6 +43,7 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
     let success = Math.random() < successRate;
     let destructionTimestamp = getSyncedNow();
     let newTurnStartTime = getSyncedNow();
+    window.activeTurnStartTime = newTurnStartTime;
 
     if (success) {
         unitsToDestroy.push({
@@ -286,9 +287,8 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                             logToConsole(`${selUnit.team.toUpperCase()} captured Gold Core cluster centrally (+2 coins)! Total: ${teamCoinsRef.current[selUnit.team]}`);
                             updateGlobalCoinHUD(teamCoinsRef.current);
 
-                            // Reward XP if player captured the cluster
                             if (selUnit.team === localTeamRef.current && currentUsername) {
-                                addPlayerXp(50, currentUsername); // +50 XP for Gold Core cluster capture
+                                addPlayerXp(50, currentUsername);
                                 logToConsole(`+50 XP Awarded for Gold Core cluster capture!`);
                             }
                         }
@@ -304,7 +304,7 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                             updateGlobalCoinHUD(teamCoinsRef.current);
 
                             if (selUnit.team === localTeamRef.current && currentUsername) {
-                                addPlayerXp(15, currentUsername); // +15 XP for standard tile/resource capture
+                                addPlayerXp(15, currentUsername);
                             }
                         }
                     }
@@ -336,6 +336,7 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                 unitsRef.current.forEach(u => u.hasMovedThisTurn = false);
                 nextTurn = playerTeamRef.current === 'blue' ? 'red' : 'blue';
                 turnChanged = true;
+                window.activeTurnStartTime = newTurnStartTime;
                 updateTurnButtonState(nextTurn, playerTeamRef.current);
             }
 
