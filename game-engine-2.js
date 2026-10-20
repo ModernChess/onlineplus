@@ -5,7 +5,7 @@ import { getRenderCoordinates } from './game-renderer.js';
 import { getShowUnitRange } from './unit-movement.js';
 import { unitsToDestroy, processDestructions, getUnitMacroRangeTiles, artilleryVulnerableUnits } from './combat-mechanics.js';
 import { tileCaptures } from './team-logic.js';
-import { updateTurnButtonState, updateGlobalCoinHUD, updateTurnTimerDisplay, updateXpDisplay } from './game-controls.js';
+import { updateTurnButtonState, updateGlobalCoinHUD, updateTurnTimerDisplay, updateXpDisplay, appendDestructionFeed, updateActiveUnitCounts } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { checkVictoryConditions } from './game-victory.js';
 
@@ -35,8 +35,9 @@ export function clearArtilleryButtons() {
 
 export function updateArtilleryButtons(canvas, selectedUnit, localTeam, units, currentTurn, playerTeam, logToConsole, onStrikeCallback) {
     clearArtilleryButtons();
+    
     if (!selectedUnit || selectedUnit.name !== 'Artillery' || !getShowUnitRange(selectedUnit.id)) return;
-    if (currentTurn !== playerTeam) return;
+    if (currentTurn !== playerTeam || selectedUnit.team !== playerTeam) return;
 
     const container = document.getElementById('canvas-container');
     if (!container) return;
@@ -127,7 +128,12 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
                 }
             }
 
-            triggerDestructionAlertFallback(targetUnit.gridX, targetUnit.gridY, defenderTeam);
+            if (defenderTeam === localTeam) {
+                triggerDestructionAlertFallback(targetUnit.gridX, targetUnit.gridY, defenderTeam);
+            }
+
+            // Append live destruction feed entry
+            appendDestructionFeed(targetUnit.name, defenderTeam, item.destroyedBy || 'Combat', attackerTeam);
 
             let statusBanner = document.getElementById('statusBanner');
             if (statusBanner) {
@@ -146,6 +152,9 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
                 targetY: targetUnit.gridY,
                 attackerX: startX,
                 attackerY: startY,
+                defenderTeam: defenderTeam,
+                destroyedBy: item.destroyedBy || 'Combat',
+                attackerTeam: attackerTeam,
                 isFarAttack: isFarAttack
             });
 
@@ -158,6 +167,7 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
 
         updateGlobalCoinHUD(teamCoins);
         processDestructions(units);
+        updateActiveUnitCounts(units); // Refresh collapsible unit counts
         return triggeredDestructions;
     }
     return [];
@@ -176,27 +186,23 @@ export function startTurnTimer(matchIdRef, playerTeam, currentTurnRef, movedUnit
         let isGameOver = window.isGameOverState || false;
         if (isGameOver) return;
 
-        // Ensure activeTurnStartTime defaults safely if uninitialized
         if (!window.activeTurnStartTime) {
             window.activeTurnStartTime = getSyncedNow();
         }
 
-        // Strictly calculate elapsed duration using centralized server time
         let syncedNow = getSyncedNow();
         let elapsed = syncedNow - window.activeTurnStartTime;
         
-        // Strict bounds clamping to prevent weird offset values over 60s or below 0s
         if (elapsed < 0) {
-            window.activeTurnStartTime = syncedNow; // Self-correct if local clock is ahead of server
+            window.activeTurnStartTime = syncedNow;
             elapsed = 0;
         }
 
         let timeLeftSec = Math.ceil((TURN_TIME_LIMIT_MS - elapsed) / 1000);
-        timeLeftSec = Math.max(0, Math.min(60, timeLeftSec)); // Hard clamp between 0 and 60 seconds
+        timeLeftSec = Math.max(0, Math.min(60, timeLeftSec));
 
         updateTurnTimerDisplay(timeLeftSec);
 
-        // Only the current player triggers the automatic turn shift when time expires
         if (elapsed >= TURN_TIME_LIMIT_MS && currentTurnRef.current === playerTeam) {
             logToConsole(`Turn time limit (60s) reached! Automatically changing turn.`);
             movedUnitsThisTurn.clear();
