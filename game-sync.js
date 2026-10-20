@@ -1,7 +1,7 @@
 // game-sync.js - Safe synchronization preventing reload exploits while honoring server turn changes (OnlinePlus Version)
 import { db, ref, update, get, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
-import { updateTurnStatusBanner, updateTurnTimerDisplay } from './game-controls.js';
+import { updateTurnStatusBanner, updateTurnTimerDisplay, appendDestructionFeed } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { getRenderCoordinates } from './game-renderer.js';
 import { getSyncedNow } from './game-engine-2.js';
@@ -34,11 +34,10 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             lastServerTurn = match.turn;
         }
 
-        // Forcefully update the global turn start time and reset timer UI immediately
         if (match.turnStartTime) {
             window.activeTurnStartTime = match.turnStartTime;
             if (serverTurnChanged) {
-                updateTurnTimerDisplay(60); // Force UI clock to 60s right away
+                updateTurnTimerDisplay(60); 
             }
         }
 
@@ -53,18 +52,32 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         if (match.lastDestructions && match.lastDestructions.timestamp > lastProcessedDestructionTime) {
             lastProcessedDestructionTime = match.lastDestructions.timestamp;
             
-            if (match.lastAction && match.lastAction.team !== playerTeam) {
-                match.lastDestructions.events.forEach(evt => {
-                    const canvas = document.getElementById('gameCanvas');
-                    if (canvas) {
-                        if (evt.isFarAttack) {
-                            triggerFarDestructionTrails(evt.attackerX, evt.attackerY, evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
-                        } else {
-                            triggerFrontalExplosion(evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
-                        }
+            match.lastDestructions.events.forEach(evt => {
+                const canvas = document.getElementById('gameCanvas');
+                if (canvas) {
+                    if (evt.isFarAttack) {
+                        triggerFarDestructionTrails(evt.attackerX, evt.attackerY, evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
+                    } else {
+                        triggerFrontalExplosion(evt.targetX, evt.targetY, getRenderCoordinates, canvas, playerTeam);
                     }
-                });
-            }
+                }
+
+                // If the destruction event came from the remote player, append it to the local destruction feed & trigger alert
+                if (match.lastAction && match.lastAction.team !== playerTeam) {
+                    // Extract unit name from unitsRef or default to generic if not found
+                    let destroyedUnitName = 'Unit';
+                    let foundU = unitsRef.find(u => u.id === evt.targetId);
+                    if (foundU && foundU.name) {
+                        destroyedUnitName = foundU.name;
+                    }
+
+                    appendDestructionFeed(destroyedUnitName, evt.defenderTeam, evt.destroyedBy || 'Combat', evt.attackerTeam);
+                }
+
+                if (evt.defenderTeam === playerTeam && typeof window.triggerDestructionAlert === 'function') {
+                    window.triggerDestructionAlert(evt.targetX, evt.targetY, evt.defenderTeam);
+                }
+            });
         }
         
         if (match.tileCaptures && tileCapturesRef) {
@@ -136,22 +149,22 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
         let opponentIsAfk = playerTeam === 'blue' ? match.redAfk : match.blueAfk;
 
         let blueAvatar = match.blueAvatar;
-        if (!blueAvatar || blueAvatar === '😀') {
+        if (!blueAvatar || blueAvatar === '馃榾') {
             const blueSnap = await get(ref(db, `game_presence/${blueName}`));
             if (blueSnap.exists() && blueSnap.val().avatar) {
                 blueAvatar = blueSnap.val().avatar;
             } else {
-                blueAvatar = localStorage.getItem(`chess_campaign_avatar_${blueName}`) || '😀';
+                blueAvatar = localStorage.getItem(`chess_campaign_avatar_${blueName}`) || '馃榾';
             }
         }
 
         let redAvatar = match.redAvatar;
-        if (!redAvatar || redAvatar === '😀') {
+        if (!redAvatar || redAvatar === '馃榾') {
             const redSnap = await get(ref(db, `game_presence/${redName}`));
             if (redSnap.exists() && redSnap.val().avatar) {
                 redAvatar = redSnap.val().avatar;
             } else {
-                redAvatar = localStorage.getItem(`chess_campaign_avatar_${redName}`) || '😀';
+                redAvatar = localStorage.getItem(`chess_campaign_avatar_${redName}`) || '馃榾';
             }
         }
 
@@ -162,7 +175,7 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             if (avatar && (avatar.startsWith('data:image/') || avatar.startsWith('http'))) {
                 return `<img src="${avatar}" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255,255,255,0.3);">`;
             }
-            return `<span style="font-size: 1rem; vertical-align: middle; margin-right: 6px;">${avatar || '😀'}</span>`;
+            return `<span style="font-size: 1rem; vertical-align: middle; margin-right: 6px;">${avatar || '馃榾'}</span>`;
         };
 
         if (match.status === 'ended') {
@@ -233,7 +246,7 @@ export function listenToMatchChat(currentMatchId, currentUser) {
             const presenceSnap = await get(ref(db, `game_presence/${currentUser}`));
             const userAvatar = (presenceSnap.exists() && presenceSnap.val().avatar)
                 ? presenceSnap.val().avatar
-                : (localStorage.getItem(`chess_campaign_avatar_${currentUser}`) || localStorage.getItem('arena_chess_avatar') || '😀');
+                : (localStorage.getItem(`chess_campaign_avatar_${currentUser}`) || localStorage.getItem('arena_chess_avatar') || '馃榾');
             
             push(chatRef, { 
                 sender: currentUser, 
@@ -252,7 +265,7 @@ export function listenToMatchChat(currentMatchId, currentUser) {
         container.innerHTML = '';
         
         Object.values(data).forEach(msg => {
-            const msgAvatar = msg.avatar || '😀';
+            const msgAvatar = msg.avatar || '馃榾';
             const avatarHTML = (msgAvatar && (msgAvatar.startsWith('data:image/') || msgAvatar.startsWith('http')))
                 ? `<img src="${msgAvatar}" class="chat-user-avatar" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255, 255, 255, 0.25);">`
                 : `<span class="chat-user-emoji" style="font-size: 1rem; vertical-align: middle; margin-right: 6px;">${msgAvatar}</span>`;
