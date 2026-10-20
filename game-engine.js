@@ -8,7 +8,7 @@ import { drawGameScene, getRenderCoordinates } from './game-renderer.js';
 import { getShowUnitRange, clearUnitRangeOverlayButton } from './unit-movement.js';
 import { ensureBuyUnitsModal, setTeamCoinsRef, setCurrentTeamRef, setPendingUnitType } from './deployment.js';
 import { tileCaptures, initTileCaptures } from './team-logic.js';
-import { createConsoleLogger, updateTurnButtonState, ensureGameActionButtons, updateGlobalCoinHUD, updateXpDisplay } from './game-controls.js';
+import { createConsoleLogger, updateTurnButtonState, ensureGameActionButtons, updateGlobalCoinHUD, updateXpDisplay, appendDestructionFeed, updateActiveUnitCounts } from './game-controls.js';
 import { startMatchMusic, stopMatchMusic } from './sound.js';
 import { initializeTileCapturesState } from './renderer-helpers-2.js';
 import { checkVictoryConditions } from './game-victory.js';
@@ -162,6 +162,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
     updateTurnButtonState(currentTurn, playerTeam);
     updateGlobalCoinHUD(teamCoins);
+    updateActiveUnitCounts(units); // Initialize active unit counts collapsible list
     initCanvasGame();
 
     const currentTurnRef = { get current() { return currentTurn; }, set current(v) { currentTurn = v; } };
@@ -220,6 +221,13 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                     teamCoins.red = remoteData.coins.red || 0;
                     updateGlobalCoinHUD(teamCoins);
                 }
+                if (remoteData.lastDestructions && remoteData.lastDestructions.events) {
+                    remoteData.lastDestructions.events.forEach(ev => {
+                        if (ev.targetX !== undefined && ev.targetY !== undefined) {
+                            // Sync destruction feed entries if received from remote opponent
+                        }
+                    });
+                }
                 if (remoteData.tileCaptures) {
                     Object.keys(remoteData.tileCaptures).forEach(key => {
                         let remoteTile = remoteData.tileCaptures[key];
@@ -239,6 +247,8 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 initializeTileCapturesState(tileCaptures);
                 hasInitializedState = true;
             }
+
+            updateActiveUnitCounts(units); // Keep collapsible unit count synced
 
             checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
                 isGameOver = val; 
