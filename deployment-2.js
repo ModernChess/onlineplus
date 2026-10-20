@@ -28,11 +28,7 @@ export const unitPrices = {
     infantry: 0.5,
     tank: 2,
     ship: 3,
-    engineer: 3,
-    antiair: 2,
-    plane: 4,
-    artillery: 3,
-    mine: 3
+    artillery: 3
 };
 
 export function setTeamCoinsRef(coinsObj) {
@@ -78,18 +74,13 @@ export function toCoordSet(list) {
 export const baseAndCoreList = [...redBasesList, ...blueBasesList, ...bbcList, ...rbcList].map(i => parseCoord(i)).filter(Boolean);
 
 export const infantryAllowedTiles = new Set([...goldList.map(i => parseCoord(i)).filter(Boolean), ...baseAndCoreList]);
-export const tankAndPlaneAllowedTiles = new Set([...toCoordSet(tList), ...baseAndCoreList]);
-export const mineAllowedTiles = new Set([...infantryAllowedTiles, ...tankAndPlaneAllowedTiles]);
+export const tankAllowedTiles = new Set([...toCoordSet(tList), ...baseAndCoreList]);
 
 export const deploymentRules = {
     infantry: infantryAllowedTiles,
-    tank: tankAndPlaneAllowedTiles,
+    tank: tankAllowedTiles,
     ship: toCoordSet(navList),
-    plane: tankAndPlaneAllowedTiles,
-    engineer: tankAndPlaneAllowedTiles,
-    artillery: toCoordSet(artList),
-    antiair: toCoordSet(artList),
-    mine: mineAllowedTiles
+    artillery: new Set(baseAndCoreList) // Artillery restricted to base squares only
 };
 
 export function normalizeType(unitType) {
@@ -113,7 +104,6 @@ export function isOwnedByTeam(tileInfo, targetTeam) {
 
 export function isTileValidForTeamInstant(coordKey, typeLower, targetTeam) {
     const cleanKey = parseCoord(coordKey) || (coordKey || '').trim();
-    let [c, r] = cleanKey.split(',').map(Number);
     let tileInfo = tileCaptures[cleanKey] || tileCaptures[coordKey];
 
     if (typeLower === 'ship') {
@@ -121,44 +111,21 @@ export function isTileValidForTeamInstant(coordKey, typeLower, targetTeam) {
         return isInNavList && isOwnedByTeam(tileInfo, targetTeam);
     }
 
-    if (typeLower === 'tank' || typeLower === 'plane' || typeLower === 'engineer') {
+    if (typeLower === 'tank') {
         if (isBaseForTeam(cleanKey, targetTeam)) return true;
         let isInTList = tList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
         return isInTList && isOwnedByTeam(tileInfo, targetTeam);
     }
 
-    if (typeLower === 'artillery' || typeLower === 'antiair') {
-        let isInArtList = artList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
-        return isInArtList && isOwnedByTeam(tileInfo, targetTeam);
+    if (typeLower === 'artillery') {
+        // Artillery spawns at base squares only for the team
+        return isBaseForTeam(cleanKey, targetTeam);
     }
 
     if (typeLower === 'infantry') {
         if (isBaseForTeam(cleanKey, targetTeam)) return true;
         let isInGoldList = goldList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
         return isInGoldList && isOwnedByTeam(tileInfo, targetTeam);
-    }
-
-    if (typeLower === 'mine') {
-        if (isBaseForTeam(cleanKey, targetTeam)) return true;
-        let isInGoldList = goldList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
-        let isInTList = tList.some(k => parseCoord(k) === cleanKey || k.trim() === coordKey);
-        if ((isInGoldList || isInTList) && isOwnedByTeam(tileInfo, targetTeam)) return true;
-
-        if (!isNaN(c) && !isNaN(r) && isWaterTerrain(c, r)) {
-            for (let dc = -3; dc <= 3; dc++) {
-                for (let dr = -3; dr <= 3; dr++) {
-                    let nx = c + dc;
-                    let ny = r + dr;
-                    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && !isWaterTerrain(nx, ny)) {
-                        let nKey = `${nx},${ny}`;
-                        let nInfo = tileCaptures[nKey];
-                        if (isBaseForTeam(nKey, targetTeam) || ((goldList.includes(nKey) || tList.includes(nKey)) && isOwnedByTeam(nInfo, targetTeam))) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
     }
 
     return false;
@@ -173,35 +140,8 @@ export function precomputeValidDeploymentTiles(unitType, targetTeam) {
     const typeLower = normalizeType(unitType);
     let candidateKeys = new Set();
 
-    if (typeLower === 'mine') {
-        let validLandTiles = [];
-        for (let gx = 0; gx < cols; gx++) {
-            for (let gy = 0; gy < rows; gy++) {
-                let key = `${gx},${gy}`;
-                if (!isWaterTerrain(gx, gy)) {
-                    let tileInfo = tileCaptures[key];
-                    if (isBaseForTeam(key, targetTeam) || ((goldList.includes(key) || tList.includes(key)) && isOwnedByTeam(tileInfo, targetTeam))) {
-                        validLandTiles.push({ x: gx, y: gy });
-                        candidateKeys.add(key);
-                    }
-                }
-            }
-        }
-        validLandTiles.forEach(land => {
-            for (let dc = -3; dc <= 3; dc++) {
-                for (let dr = -3; dr <= 3; dr++) {
-                    let nx = land.x + dc;
-                    let ny = land.y + dr;
-                    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && isWaterTerrain(nx, ny)) {
-                        candidateKeys.add(`${nx},${ny}`);
-                    }
-                }
-            }
-        });
-    } else {
-        let allowed = deploymentRules[typeLower] || new Set();
-        allowed.forEach(k => candidateKeys.add(k));
-    }
+    let allowed = deploymentRules[typeLower] || new Set();
+    allowed.forEach(k => candidateKeys.add(k));
 
     candidateKeys.forEach(coordKey => {
         if (isTileValidForTeamInstant(coordKey, typeLower, targetTeam)) {
