@@ -20,7 +20,6 @@ export const bbList = blueBasesList;
 
 export let tileCaptures = {};
 
-// Map game-config's goldClusters structure to team-logic's expected format
 export const goldCoreClusters = goldClusters.map(cluster => ({
     gc: cluster.core,
     linked: [...cluster.tiles],
@@ -40,20 +39,6 @@ export const tileCoinValues = {
 export function parseCoord(item) {
     if (typeof item !== 'string') return null;
 
-    let chessMatch = item.match(/^([A-Z]+)(\d+)$/);
-    if (chessMatch) {
-        let colStr = chessMatch[1];
-        let rowNum = parseInt(chessMatch[2], 10);
-        let rawIndex = colLetterToIndex(colStr);
-        if (rawIndex === undefined || rawIndex === null) return null;
-        
-        let correctedCol = rawIndex;
-        let rIdx = rowNum - 18; 
-        if (correctedCol < 0 || correctedCol >= cols || rIdx < 0 || rIdx >= rows) return null;
-
-        return `${correctedCol},${rIdx}`;
-    }
-
     let parts = item.split(',');
     if (parts.length !== 2) return null;
     
@@ -70,9 +55,6 @@ export function parseCoord(item) {
 export function initTileCaptures() {
     tileCaptures = {};
 
-    const alliedGoldCores = ["2,10", "5,12", "8,11", "4,16", "3,19", "9,16", "13,16", "13,5", "10,8", "21,23"];
-    const axisGoldCores = ["10,30", "13,30", "15,23", "10,21", "8,24", "4,24", "2,26"];
-
     const registerList = (list, typeName, defaultOwner = null) => {
         if (!list) return;
         list.forEach(item => {
@@ -83,6 +65,7 @@ export function initTileCaptures() {
         });
     };
 
+    // Register basic structures and neutral items
     registerList(goldList, 'gold', null);
     registerList(redBasesList, 'red base', 'red');       
     registerList(blueBasesList, 'blue base', 'blue');    
@@ -92,32 +75,32 @@ export function initTileCaptures() {
     registerList(artList, 'artillery', null);
     registerList(tList, 'tank', null);
 
-    // Pre-occupy gold cores, linked tiles, and associated cluster units according to Allied (blue) or Axis (red) alignment
+    // Keep all gold cores and their linked tiles strictly neutral at startup
     goldCoreClusters.forEach(cluster => {
         let gcKey = parseCoord(cluster.gc);
-        let owner = null;
-        if (alliedGoldCores.includes(cluster.gc)) owner = 'blue';
-        else if (axisGoldCores.includes(cluster.gc)) owner = 'red';
-
         if (gcKey) {
-            tileCaptures[gcKey] = { type: 'gold core', capturedBy: owner };
+            tileCaptures[gcKey] = { type: 'gold core', capturedBy: null };
         }
 
         cluster.linked.forEach(link => {
             let linkKey = parseCoord(link);
             if (linkKey) {
-                tileCaptures[linkKey] = { type: 'gold core linked', gcCoord: gcKey, capturedBy: owner };
+                tileCaptures[linkKey] = { type: 'gold core linked', gcCoord: gcKey, capturedBy: null };
             }
         });
+    });
 
-        if (cluster.units) {
-            cluster.units.forEach(u => {
-                let uKey = parseCoord(u.coordinates);
-                if (uKey) {
-                    let uTypeName = u.type === 'port' ? 'port' : (u.type === 'artillery' ? 'artillery' : 'tank');
-                    tileCaptures[uKey] = { type: uTypeName, gcCoord: gcKey, capturedBy: owner };
-                }
-            });
+    // Explicitly re-apply pre-ownership to the designated Navy ports
+    const designatedBluePorts = ["5,11"];
+    const designatedRedPorts = ["11,5"];
+
+    navList.forEach(navCoord => {
+        let key = parseCoord(navCoord);
+        if (key) {
+            let owner = null;
+            if (designatedBluePorts.includes(navCoord)) owner = 'blue';
+            else if (designatedRedPorts.includes(navCoord)) owner = 'red';
+            tileCaptures[key] = { type: 'port', capturedBy: owner };
         }
     });
 }
