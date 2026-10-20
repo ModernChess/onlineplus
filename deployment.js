@@ -1,4 +1,4 @@
-// deployment.js - Handles Unit Purchasing, Affordability Checks, and Grid Placement Logic for All Units
+// deployment.js - Handles Unit Purchasing, Affordability Checks, and Grid Placement Logic for Allowed Units
 import { db, ref, update } from './network.js';
 import { 
     isWaterTerrain 
@@ -32,11 +32,7 @@ export function ensureBuyUnitsModal(logToConsole, getCurrentUnits, getPlayerTeam
                 <div class="buy-unit-item"><span>Infantry (${unitPrices.infantry} Coin)</span><button class="btn primary-btn" data-type="infantry">Buy</button></div>
                 <div class="buy-unit-item"><span>Tank (${unitPrices.tank} Coins)</span><button class="btn primary-btn" data-type="tank">Buy</button></div>
                 <div class="buy-unit-item"><span>Ship (${unitPrices.ship} Coins)</span><button class="btn primary-btn" data-type="ship">Buy</button></div>
-                <div class="buy-unit-item"><span>Plane (${unitPrices.plane} Coins)</span><button class="btn primary-btn" data-type="plane">Buy</button></div>
                 <div class="buy-unit-item"><span>Artillery (${unitPrices.artillery} Coins)</span><button class="btn primary-btn" data-type="artillery">Buy</button></div>
-                <div class="buy-unit-item"><span>Engineer (${unitPrices.engineer} Coins)</span><button class="btn primary-btn" data-type="engineer">Buy</button></div>
-                <div class="buy-unit-item"><span>Anti-Air (${unitPrices.antiair} Coin)</span><button class="btn primary-btn" data-type="antiair">Buy</button></div>
-                <div class="buy-unit-item"><span>Mine (${unitPrices.mine} Coins)</span><button class="btn primary-btn" data-type="mine">Buy</button></div>
             </div>
         </div>
     `;
@@ -80,7 +76,7 @@ export function ensureBuyUnitsModal(logToConsole, getCurrentUnits, getPlayerTeam
                 buyBtn.classList.remove('btn-frozen');
             }
 
-            logToConsole(`Purchased ${rawType} for ${cost} coin(s). Select a valid captured deployment tile.`);
+            logToConsole(`Purchased ${rawType} for ${cost} coin(s). Select a valid base/deployment tile.`);
             
             const resolvedUnits = (typeof getCurrentUnits === 'function' && getCurrentUnits().length > 0) 
                 ? getCurrentUnits() 
@@ -217,30 +213,18 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     if (typeLower === 'ship') {
         unitTypeVal = 'naval';
         unitRange = 2; 
-    } else if (typeLower === 'tank' || typeLower === 'plane') {
-        unitTypeVal = typeLower === 'plane' ? 'air' : 'land';
-        unitRange = typeLower === 'plane' ? 4 : 3;
-    } else if (typeLower === 'engineer') {
-        unitTypeVal = 'air';
-        unitRange = 1;
+    } else if (typeLower === 'tank') {
+        unitTypeVal = 'land';
+        unitRange = 3;
     } else if (typeLower === 'artillery') {
         unitTypeVal = 'land';
         unitRange = 1;
-    } else if (typeLower === 'antiair') {
-        unitTypeVal = 'land';
-        unitRange = 1;
-    } else if (typeLower === 'mine') {
-        unitTypeVal = isWaterTerrain(clickedCol, clickedRow) ? 'naval' : 'land';
-        unitRange = 0;
     } else if (typeLower === 'infantry') {
         unitTypeVal = 'land';
         unitRange = 2;
     }
 
-    let formattedName = pendingUnitType;
-    if (typeLower === 'antiair') formattedName = 'Anti-Air';
-    else if (typeLower === 'mine') formattedName = 'Mine';
-    else formattedName = pendingUnitType.charAt(0).toUpperCase() + pendingUnitType.slice(1);
+    let formattedName = pendingUnitType.charAt(0).toUpperCase() + pendingUnitType.slice(1);
 
     const newUnit = {
         id: 'test_' + Math.random().toString(36).substring(2, 9),
