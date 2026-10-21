@@ -1,4 +1,4 @@
-// game-renderer.js - Handles Canvas Drawing, Map Background Rendering, Unit Visuals, Glide Animations, Tile Highlighting, and Stalemate Badges (18x18 System)
+// game-renderer.js - Handles Canvas Drawing, Map Background Rendering, Unit Visuals, Glide Animations, Tile Highlighting, and Stalemate Badges
 import { 
     cols, rows, 
     mapImg, mapLoaded 
@@ -13,7 +13,9 @@ import { drawUnitsAndBadges } from './game-renderer-2.js';
 
 let superunitBadgeCache = new Map();
 let cachedUnitsForDeployment = [];
-let activeDestructionAlerts = []; // Stores { x, y, team, startTime }
+let activeDestructionAlerts = []; 
+let activeDeploymentAlerts = [];
+let activeMovementTrails = []; 
 
 export function triggerDestructionAlert(gridX, gridY, team) {
     activeDestructionAlerts.push({
@@ -24,15 +26,138 @@ export function triggerDestructionAlert(gridX, gridY, team) {
     });
 }
 
-// Bind globally so combat mechanics and fallback systems can call it without module scope errors
-window.triggerDestructionAlert = triggerDestructionAlert;
+export function triggerDeploymentAlert(gridX, gridY, team) {
+    activeDeploymentAlerts.push({
+        x: gridX,
+        y: gridY,
+        team: team,
+        startTime: performance.now()
+    });
+}
 
-export function drawDestructionAlerts(ctx, canvas, localTeam) {
-    if (!activeDestructionAlerts || activeDestructionAlerts.length === 0) return;
+export function triggerMovementArrowTrail(fromX, fromY, toX, toY, team) {
+    activeMovementTrails.push({
+        fromX: fromX,
+        fromY: fromY,
+        toX: toX,
+        toY: toY,
+        team: team,
+        startTime: performance.now()
+    });
+}
+
+window.triggerDestructionAlert = triggerDestructionAlert;
+window.triggerDeploymentAlert = triggerDeploymentAlert;
+window.triggerMovementArrowTrail = triggerMovementArrowTrail;
+
+export function drawMovementArrowTrails(ctx, canvas, localTeam) {
+    if (!activeMovementTrails || activeMovementTrails.length === 0) return;
     let now = performance.now();
-    let duration = 10000; // 10 seconds
+    let duration = 30000;
 
     ctx.save();
+    for (let i = activeMovementTrails.length - 1; i >= 0; i--) {
+        let trail = activeMovementTrails[i];
+        let elapsed = now - trail.startTime;
+
+        if (elapsed >= duration) {
+            activeMovementTrails.splice(i, 1);
+            continue;
+        }
+
+        let startPos = getRenderCoordinates(trail.fromX, trail.fromY, canvas.width, localTeam);
+        let endPos = getRenderCoordinates(trail.toX, trail.toY, canvas.width, localTeam);
+
+        let startX = startPos.x + startPos.cellSize / 2;
+        let startY = startPos.y + startPos.cellSize / 2;
+        let endX = endPos.x + endPos.cellSize / 2;
+        let endY = endPos.y + endPos.cellSize / 2;
+
+        let alpha = Math.max(0, 1 - (elapsed / duration));
+        ctx.globalAlpha = alpha;
+
+        let dx = endX - startX;
+        let dy = endY - startY;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        let angle = Math.atan2(dy, dx);
+
+        if (dist > 0) {
+            let stripeWidth = 4.5; 
+            let numSegments = Math.max(4, Math.floor(dist / 10));
+            
+            for (let s = 0; s < numSegments; s++) {
+                let r1 = s / numSegments;
+                let r2 = (s + 1) / numSegments;
+                
+                let segStartX = startX + dx * r1;
+                let segStartY = startY + dy * r1;
+                let segEndX = startX + dx * r2;
+                let segEndY = startY + dy * r2;
+
+                ctx.strokeStyle = (s % 2 === 0) ? '#f1c40f' : '#111111';
+                ctx.lineWidth = stripeWidth;
+                ctx.lineCap = 'butt';
+
+                ctx.beginPath();
+                ctx.moveTo(segStartX, segStartY);
+                ctx.lineTo(segEndX, segEndY);
+                ctx.stroke();
+            }
+        }
+
+        if (dist > 0) {
+            let numArrows = Math.max(4, Math.floor(dist / 22));
+            for (let step = 1; step <= numArrows; step++) {
+                let ratio = step / (numArrows + 1);
+                let offsetPulse = ((now / 350) % 1) * (1 / numArrows);
+                let currentRatio = Math.min(0.96, Math.max(0.04, ratio + offsetPulse));
+                
+                let curX = startX + dx * currentRatio;
+                let curY = startY + dy * currentRatio;
+
+                ctx.save();
+                ctx.translate(curX, curY);
+                ctx.rotate(angle);
+
+                ctx.fillStyle = '#f1c40f';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1.5;
+
+                ctx.beginPath();
+                ctx.moveTo(2, 0);
+                ctx.lineTo(-9, -5);
+                ctx.lineTo(-9, 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(endX, endY, startPos.cellSize * 0.38, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+export function drawDestructionAlerts(canvas, localTeam) {
+    let container = document.getElementById('canvas-container');
+    if (!container) return;
+
+    let existingOverlays = container.querySelectorAll('.canvas-alert-overlay');
+    existingOverlays.forEach(el => el.remove());
+
+    let now = performance.now();
+    let duration = 8000;
+    let scaleX = canvas.clientWidth / canvas.width;
+    let scaleY = canvas.clientHeight / canvas.height;
+    let cam = window.currentCameraState || { x: 0, y: 0, zoom: 1 };
+
+    let isBlinkVisible = Math.floor(now / 250) % 2 === 0;
+
     for (let i = activeDestructionAlerts.length - 1; i >= 0; i--) {
         let alertObj = activeDestructionAlerts[i];
         let elapsed = now - alertObj.startTime;
@@ -43,33 +168,55 @@ export function drawDestructionAlerts(ctx, canvas, localTeam) {
         }
 
         let pos = getRenderCoordinates(alertObj.x, alertObj.y, canvas.width, localTeam);
-        let cx = pos.x + pos.cellSize / 2;
-        let cy = pos.y + pos.cellSize / 2;
+        let worldX = (pos.x + pos.cellSize / 2) * cam.zoom + cam.x;
+        let worldY = pos.y * cam.zoom + cam.y; 
 
-        let blink = Math.floor(now / 300) % 2 === 0;
-        if (blink) {
-            ctx.font = `bold ${Math.floor(pos.cellSize * 0.8)}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#ff3838';
-            ctx.shadowColor = '#000';
-            ctx.shadowBlur = 6;
-            ctx.fillText('❗', cx, cy - pos.cellSize * 0.2);
-            ctx.shadowBlur = 0;
+        let screenX = worldX * scaleX;
+        let screenY = worldY * scaleY;
+
+        let overlay = document.createElement('div');
+        overlay.className = 'canvas-alert-overlay';
+        overlay.style.left = `${screenX}px`;
+        overlay.style.top = `${screenY}px`;
+        overlay.style.opacity = isBlinkVisible ? '1' : '0.2';
+        
+        overlay.innerHTML = `
+            <div class="destruction-beacon">
+                <div class="destruction-exclamation">❗</div>
+            </div>
+        `;
+        container.appendChild(overlay);
+    }
+
+    for (let i = activeDeploymentAlerts.length - 1; i >= 0; i--) {
+        let depObj = activeDeploymentAlerts[i];
+        let elapsed = now - depObj.startTime;
+
+        if (elapsed >= duration || depObj.team === localTeam) {
+            if (elapsed >= duration) activeDeploymentAlerts.splice(i, 1);
+            continue;
         }
 
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 3;
-        ctx.fillStyle = '#f1c40f';
-        ctx.beginPath();
-        ctx.moveTo(cx, cy + pos.cellSize * 0.4);
-        ctx.lineTo(cx - 8, cy + pos.cellSize * 0.15);
-        ctx.lineTo(cx + 8, cy + pos.cellSize * 0.15);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        let pos = getRenderCoordinates(depObj.x, depObj.y, canvas.width, localTeam);
+        let worldX = (pos.x + pos.cellSize / 2) * cam.zoom + cam.x;
+        let worldY = pos.y * cam.zoom + cam.y;
+
+        let screenX = worldX * scaleX;
+        let screenY = worldY * scaleY;
+
+        let overlay = document.createElement('div');
+        overlay.className = 'canvas-alert-overlay';
+        overlay.style.left = `${screenX}px`;
+        overlay.style.top = `${screenY}px`;
+        overlay.style.opacity = isBlinkVisible ? '1' : '0.2';
+
+        overlay.innerHTML = `
+            <div class="deployment-beacon-circle" title="Enemy Unit Deployed Here!">
+                ❗
+            </div>
+        `;
+        container.appendChild(overlay);
     }
-    ctx.restore();
 }
 
 export function updateRendererUnits(units) {
@@ -94,6 +241,8 @@ export function getRenderCoordinates(gridX, gridY, canvasWidth, localTeam) {
 
     return { x: renderX * cellSize, y: renderY * cellSize, cellSize: cellSize };
 }
+
+window.getRenderCoordinates = getRenderCoordinates;
 
 export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legalMoves = [], selectionAnimStartTime = null, stagedMove = null) {
     if (!ctx || !canvas) return;
@@ -125,7 +274,7 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
     drawDeploymentOverlay(ctx, canvas, tileCaptures, units, getRenderCoordinates, localTeam);
 
     drawCombatAnimations(ctx, canvas);
-    drawDestructionAlerts(ctx, canvas, localTeam);
+    drawMovementArrowTrails(ctx, canvas, localTeam);
 
     if (selectedUnit && legalMoves && legalMoves.length > 0) {
         ctx.save();
@@ -186,12 +335,37 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
         }
     });
 
+    let now = performance.now();
     units.forEach(unit => {
         if (getShowUnitRange(unit.id)) {
             ctx.save();
             let rangeVal = getUnitRange(unit);
             
             if (rangeVal > 0) {
+                let unitNameLower = (unit.name || '').toLowerCase();
+                let footprintColor = '#2196F3'; 
+                let glowColor = '#2196F3';
+
+                if (unitNameLower.includes('artillery')) {
+                    footprintColor = '#ffa500'; 
+                    glowColor = '#ff8c00';
+                } else if (unitNameLower.includes('ship') || (unit.type && unit.type.includes('naval'))) {
+                    footprintColor = '#8b5cf6'; 
+                    glowColor = '#7c3aed';
+                } else if (unitNameLower.includes('engineer')) {
+                    footprintColor = '#10b981'; 
+                    glowColor = '#059669';
+                } else if (unitNameLower.includes('mine')) {
+                    footprintColor = '#ef4444'; 
+                    glowColor = '#dc2626';
+                } else if (unitNameLower.includes('antiair')) {
+                    footprintColor = '#06b6d4'; 
+                    glowColor = '#0891b2';
+                } else {
+                    footprintColor = '#ec4899'; 
+                    glowColor = '#db2777';
+                }
+
                 let macroSize = 2;
                 let unitMCol = Math.floor(unit.gridX / macroSize);
                 let unitMRow = Math.floor(unit.gridY / macroSize);
@@ -232,22 +406,28 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
                     let pos1 = getRenderCoordinates(startGridX, startGridY, canvas.width, localTeam);
                     let pos2 = getRenderCoordinates(endGridX, endGridY, canvas.width, localTeam);
 
-                    let rectX = Math.min(pos1.x, pos2.x) + 2;
-                    let rectY = Math.min(pos1.y, pos2.y) + 2;
+                    let rectX = Math.min(pos1.x, pos2.x) + 3;
+                    let rectY = Math.min(pos1.y, pos2.y) + 3;
                     let maxRendererX = Math.max(pos1.x + pos1.cellSize, pos2.x + pos2.cellSize);
                     let maxRendererY = Math.max(pos1.y + pos1.cellSize, pos2.y + pos2.cellSize);
-                    let rectWidth = maxRendererX - rectX - 2;
-                    let rectHeight = maxRendererY - rectY - 2;
+                    let rectWidth = maxRendererX - rectX - 3;
+                    let rectHeight = maxRendererY - rectY - 3;
 
-                    ctx.globalAlpha = 0.25;
-                    ctx.fillStyle = '#2196F3';
+                    ctx.save();
+                    ctx.globalAlpha = 0.32;
+                    ctx.fillStyle = footprintColor;
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = 10;
                     ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
 
-                    ctx.globalAlpha = 0.8;
-                    ctx.strokeStyle = '#2196F3';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([4, 4]);
+                    ctx.globalAlpha = 0.95;
+                    ctx.strokeStyle = footprintColor;
+                    ctx.lineWidth = 2.5;
+                    let dashOffset = (now * 0.03) % 16;
+                    ctx.setLineDash([6, 4]);
+                    ctx.lineDashOffset = -dashOffset;
                     ctx.strokeRect(rectX, rectY, rectWidth, rectHeight);
+                    ctx.restore();
                 });
             }
             ctx.restore();
@@ -291,4 +471,6 @@ export function drawGameScene(ctx, canvas, units, selectedUnit, localTeam, legal
     drawUnitsAndBadges(ctx, canvas, units, selectedUnit, localTeam, detectedUnitIds, singleBadgeMap, teamSuperunitsMap, selectionAnimStartTime, getRenderCoordinates);
 
     ctx.restore();
+
+    drawDestructionAlerts(canvas, localTeam);
 }
