@@ -368,8 +368,9 @@ canvas {
     margin: 0;
 }
 
-/* Independent Unit Range Button (R Button) Styles */
-.unit-range-btn {
+/* Independent Unit Range Button (R Button) & Artillery Destruction Button (D Button) Styles */
+.unit-range-btn,
+.artillery-action-btn {
     position: absolute;
     z-index: 1000;
     width: 34px;
@@ -386,12 +387,21 @@ canvas {
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     border: 2px solid #ffffff;
-    background-color: #2980b9;
-    color: #ffffff;
     transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
-.unit-range-btn:hover {
+.unit-range-btn {
+    background-color: #2980b9;
+    color: #ffffff;
+}
+
+.artillery-action-btn {
+    background-color: #e74c3c;
+    color: #ffffff;
+}
+
+.unit-range-btn:hover,
+.artillery-action-btn:hover {
     transform: scale(1.1);
 }
 
