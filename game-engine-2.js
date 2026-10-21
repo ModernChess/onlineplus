@@ -8,6 +8,7 @@ import { tileCaptures } from './team-logic.js';
 import { updateTurnButtonState, updateGlobalCoinHUD, updateTurnTimerDisplay, updateXpDisplay, appendDestructionFeed, updateActiveUnitCounts } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
 import { checkVictoryConditions } from './game-victory.js';
+import { playCoinSound, playWarningSound } from './sound.js';
 
 export let serverTimeOffset = 0; 
 export let turnTimerInterval = null;
@@ -57,10 +58,9 @@ export function updateArtilleryButtons(canvas, selectedUnit, localTeam, units, c
             let screenY = worldY * scaleY;
             
             let scaledCellSize = renderPos.cellSize * cam.zoom * scaleX;
-            let btnSize = Math.min(32, Math.max(20, scaledCellSize * 0.5));
-
-            let offsetX = scaledCellSize - (btnSize * 0.3);
-            let offsetY = -btnSize * 0.2;
+            let btnSize = 34;
+            let offsetX = scaledCellSize - (btnSize * 0.15);
+            let offsetY = -btnSize * 0.35;
 
             let btn = document.createElement('button');
             btn.className = 'artillery-strike-btn';
@@ -73,17 +73,19 @@ export function updateArtilleryButtons(canvas, selectedUnit, localTeam, units, c
             btn.style.top = `${screenY + offsetY}px`;
             btn.style.width = `${btnSize}px`;
             btn.style.height = `${btnSize}px`;
-            btn.style.fontSize = `${Math.max(10, btnSize * 0.45)}px`;
+            btn.style.minWidth = `${btnSize}px`;
+            btn.style.minHeight = `${btnSize}px`;
+            btn.style.fontSize = '14px';
             btn.style.borderRadius = '50%';
             btn.style.backgroundColor = '#e74c3c';
             btn.style.color = '#fff';
             btn.style.border = '2px solid #fff';
             btn.style.cursor = 'pointer';
-            btn.style.boxShadow = '0 3px 6px rgba(0,0,0,0.4)';
+            btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.6)';
             btn.style.display = 'flex';
             btn.style.alignItems = 'center';
             btn.style.justifyContent = 'center';
-            btn.style.fontWeight = 'bold';
+            btn.style.fontWeight = '900';
 
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -104,16 +106,31 @@ function getCameraStateFallback() {
 export function handleCombatDestructions(canvas, units, teamCoins, logToConsole, localTeam, actingUnit = null) {
     if (unitsToDestroy && unitsToDestroy.length > 0) {
         let triggeredDestructions = [];
+        let localTeamEarnedCoins = false;
 
         unitsToDestroy.forEach(item => {
             let targetUnit = item.unit;
             let attackerTeam = item.attackerTeam || (actingUnit ? actingUnit.team : 'blue');
             let defenderTeam = targetUnit.team;
 
-            teamCoins[attackerTeam] = parseFloat(((teamCoins[attackerTeam] || 0) + 1.5).toFixed(1));
-            teamCoins[defenderTeam] = parseFloat(Math.max(0, (teamCoins[defenderTeam] || 0) - 1.0).toFixed(1));
+            let normName = (targetUnit.name || '').toLowerCase();
+            let rewardCoins = 1.0; 
+
+            if (normName.includes('infantry')) {
+                rewardCoins = 0.3;
+            } else if (normName.includes('tank')) {
+                rewardCoins = 1.5;
+            } else if (normName.includes('artillery') || normName.includes('ship')) {
+                rewardCoins = 2.0;
+            }
+
+            teamCoins[attackerTeam] = parseFloat(((teamCoins[attackerTeam] || 0) + rewardCoins).toFixed(1));
+            
+            let penaltyCoins = parseFloat((rewardCoins / 2).toFixed(1));
+            teamCoins[defenderTeam] = parseFloat(Math.max(0, (teamCoins[defenderTeam] || 0) - penaltyCoins).toFixed(1));
 
             if (attackerTeam === localTeam) {
+                localTeamEarnedCoins = true;
                 let currentUsername = localStorage.getItem('arena_chess_user');
                 playerXp += 25;
                 updateXpDisplay(playerXp);
@@ -132,14 +149,13 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
                 triggerDestructionAlertFallback(targetUnit.gridX, targetUnit.gridY, defenderTeam);
             }
 
-            // Append live destruction feed entry
             appendDestructionFeed(targetUnit.name, defenderTeam, item.destroyedBy || 'Combat', attackerTeam);
 
             let statusBanner = document.getElementById('statusBanner');
             if (statusBanner) {
-                statusBanner.innerHTML = `⚠️ <strong style="color:${defenderTeam === 'blue' ? '#3498db' : '#e74c3c'};">${defenderTeam.toUpperCase()}</strong> unit (${targetUnit.name}) destroyed by <strong style="color:${attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${attackerTeam.toUpperCase()}</strong>! (+25 XP)`;
+                statusBanner.innerHTML = `⚠️ <strong style="color:${defenderTeam === 'blue' ? '#3498db' : '#e74c3c'};">${defenderTeam.toUpperCase()}</strong> unit (${targetUnit.name}) destroyed by <strong style="color:${attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${attackerTeam.toUpperCase()}</strong>! (+${rewardCoins} Coins, -${penaltyCoins} Coins, +25 XP)`;
             }
-            logToConsole(`Destruction Alert: ${defenderTeam} lost ${targetUnit.name} at [${targetUnit.gridX}, ${targetUnit.gridY}].`);
+            logToConsole(`Destruction Alert: ${defenderTeam} lost ${targetUnit.name}. Attacker gained +${rewardCoins} coins, defender lost -${penaltyCoins} coins.`);
 
             let attackerType = (item.destroyedBy || '').toLowerCase();
             let isFarAttack = attackerType.includes('artillery') || attackerType.includes('ship') || attackerType.includes('anti-air');
@@ -165,9 +181,13 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
             }
         });
 
+        if (localTeamEarnedCoins) {
+            playCoinSound();
+        }
+
         updateGlobalCoinHUD(teamCoins);
         processDestructions(units);
-        updateActiveUnitCounts(units); // Refresh collapsible unit counts
+        updateActiveUnitCounts(units);
         return triggeredDestructions;
     }
     return [];
@@ -177,6 +197,7 @@ function triggerDestructionAlertFallback(gx, gy, team) {
     if (typeof window.triggerDestructionAlert === 'function') {
         window.triggerDestructionAlert(gx, gy, team);
     }
+    playWarningSound(8000);
 }
 
 export function startTurnTimer(matchIdRef, playerTeam, currentTurnRef, movedUnitsThisTurn, units, logToConsole, onTurnTimeout) {
