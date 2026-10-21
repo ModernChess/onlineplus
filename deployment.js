@@ -1,5 +1,5 @@
 // deployment.js - Handles Unit Purchasing, Affordability Checks, and Grid Placement Logic for Allowed Units
-import { db, ref, update } from './network.js';
+import { db, ref, update, push } from './network.js';
 import { 
     isWaterTerrain 
 } from './game-config.js';
@@ -12,6 +12,9 @@ import {
     normalizeType, precomputeValidDeploymentTiles, isTileValidForTeam, 
     getPendingUnitType, setPendingUnitType 
 } from './deployment-2.js';
+import { getSyncedNow } from './game-engine-2.js';
+import { triggerDeploymentAlert } from './game-renderer.js';
+import { playMetalClangSound } from './sound.js';
 
 export { setTeamCoinsRef, setCurrentTeamRef, getTeamCoins, setDeploymentUnits, getIsShopOpen, isTileValidForTeam, getPendingUnitType, setPendingUnitType };
 
@@ -225,6 +228,7 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     }
 
     let formattedName = pendingUnitType.charAt(0).toUpperCase() + pendingUnitType.slice(1);
+    let deploymentTimestamp = getSyncedNow();
 
     const newUnit = {
         id: 'test_' + Math.random().toString(36).substring(2, 9),
@@ -245,12 +249,32 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     activeUnits.push(newUnit);
     logToConsole(`Placed new unit ${newUnit.name} at coordinates [${clickedCol}, ${clickedRow}]`);
 
+    // Trigger local visual deployment warning beacon and metal clang sound effect for yourself
+    triggerDeploymentAlert(clickedCol, clickedRow, playerTeam);
+    playMetalClangSound();
+
     cleanupUnitDeployerPopup();
 
     if (currentMatchId) {
         update(ref(db, `matches_plus/${currentMatchId}`), { 
             units: activeUnits,
-            coins: coinsRefToUse 
+            coins: coinsRefToUse,
+            lastDeployment: {
+                x: clickedCol,
+                y: clickedRow,
+                team: playerTeam,
+                timestamp: deploymentTimestamp
+            }
+        });
+
+        push(ref(db, `matches_plus/${currentMatchId}/movementFeed`), {
+            unitName: `Deployed ${newUnit.name}`,
+            team: playerTeam,
+            fromX: clickedCol,
+            fromY: clickedRow,
+            toX: clickedCol,
+            toY: clickedRow,
+            timestamp: deploymentTimestamp
         });
     }
 
