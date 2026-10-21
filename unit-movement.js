@@ -30,7 +30,10 @@ export function getUnitRange(unit) {
     if (unit.name === 'Artillery') {
         return 3; // Artillery range set to 3 to activate R and D buttons
     }
-    if (unit.name === 'Engineer' || unit.name === 'Mine') {
+    if (unit.name === 'Ship' || (unit.type && unit.type.includes('naval'))) {
+        return 1; // Ships tactical footprint range
+    }
+    if (unit.name === 'Engineer' || unit.name === 'Mine' || unit.name === 'AntiAir') {
         return 1;
     }
     return 1;
@@ -73,7 +76,6 @@ export function updateUnitRangeOverlayButton(canvas, selectedUnit, localTeam, lo
         btn.style.backgroundColor = '#27ae60';
     }
 
-    // Increased offsets further away from the unit to prevent crowding
     let offsetX = -36 * (cam.zoom || 1);
     let offsetY = -42 * (cam.zoom || 1);
 
