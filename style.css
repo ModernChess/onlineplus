@@ -383,3 +383,105 @@ p {
     object-fit: cover;
     border-radius: 50%;
 }
+
+/* ========================================================== */
+/* MODERN DYNAMIC ALERT & WARNING OVERLAYS (ABOVE UNITS)      */
+/* ========================================================== */
+
+.canvas-alert-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1005; /* Renders strictly above canvas elements & unit sprites */
+    transform: translate(-50%, -100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.08s linear;
+}
+
+/* Modern Destruction Target Indicator */
+.destruction-beacon {
+    position: relative;
+    width: auto;
+    height: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.destruction-exclamation {
+    background: linear-gradient(135deg, #ff3838, #b71c1c);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 900;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(255, 56, 56, 0.8), inset 0 1px 3px rgba(255, 255, 255, 0.4);
+    border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Modern Unit Deployment Blue Circle Beacon */
+.deployment-beacon-circle {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 900;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(33, 150, 243, 0.8), inset 0 1px 3px rgba(255, 255, 255, 0.4);
+    border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Modern Unit Deployment Blinking Exclamation Beacon (Legacy/Fallback) */
+.deployment-beacon {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.deployment-beacon::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid #f1c40f;
+    animation: deployPulse 1s ease-in-out infinite;
+}
+
+@keyframes deployPulse {
+    0% { transform: scale(0.6); opacity: 1; }
+    100% { transform: scale(1.6); opacity: 0; }
+}
+
+.deployment-exclamation {
+    background: linear-gradient(135deg, #f1c40f, #d35400);
+    color: #121212;
+    font-size: 13px;
+    font-weight: 900;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 12px rgba(241, 196, 15, 0.8), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+    border: 2px solid #ffffff;
+}
+
+@keyframes blinkAlert {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+}
