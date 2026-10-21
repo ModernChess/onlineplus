@@ -73,7 +73,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     document.getElementById('statusBanner').innerText = "Match started! 60s turn timer active.";
     logToConsole(`Starting game session as team: ${playerTeam}`);
 
-    // Fetch existing user XP from Firebase so it doesn't reset to 0 on new matches
     if (currentUser) {
         get(ref(db, `user_xp/${currentUser}`)).then((snap) => {
             if (snap.exists()) {
@@ -105,6 +104,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     });
 
     if (coinIncomeInterval) clearInterval(coinIncomeInterval);
+    // Coin income interval duration made 2x longer (changed from 2000ms to 4000ms)
     setInterval(() => {
         if (isGameOver) return;
 
@@ -129,7 +129,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 });
             }
         }
-    }, 2000);
+    }, 4000);
 
     if (units.length === 0) {
         spawnTeamUnits('blue', units);
@@ -162,7 +162,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
     updateTurnButtonState(currentTurn, playerTeam);
     updateGlobalCoinHUD(teamCoins);
-    updateActiveUnitCounts(units); // Initialize active unit counts collapsible list
+    updateActiveUnitCounts(units);
     initCanvasGame();
 
     const currentTurnRef = { get current() { return currentTurn; }, set current(v) { currentTurn = v; } };
@@ -221,13 +221,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                     teamCoins.red = remoteData.coins.red || 0;
                     updateGlobalCoinHUD(teamCoins);
                 }
-                if (remoteData.lastDestructions && remoteData.lastDestructions.events) {
-                    remoteData.lastDestructions.events.forEach(ev => {
-                        if (ev.targetX !== undefined && ev.targetY !== undefined) {
-                            // Sync destruction feed entries if received from remote opponent
-                        }
-                    });
-                }
                 if (remoteData.tileCaptures) {
                     Object.keys(remoteData.tileCaptures).forEach(key => {
                         let remoteTile = remoteData.tileCaptures[key];
@@ -248,7 +241,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                 hasInitializedState = true;
             }
 
-            updateActiveUnitCounts(units); // Keep collapsible unit count synced
+            updateActiveUnitCounts(units);
 
             checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
                 isGameOver = val; 
