@@ -1,4 +1,4 @@
-// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, XP Bar, Destruction Feed, and Active Unit Counts
+// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, XP Bar, Destruction Feed, Movement Feed, and Active Unit Counts
 import { db, ref, update } from './network.js';
 import { clearUnitRangeOverlayButton } from './unit-movement.js';
 
@@ -124,7 +124,6 @@ export function ensureCoinHudBar() {
                 border-radius: 4px;
                 letter-spacing: 1px;
             }
-            /* XP Display Frame Styles */
             .xp-bar-frame {
                 position: relative;
                 background: rgba(15, 15, 22, 0.9);
@@ -196,7 +195,7 @@ export function ensureCoinHudBar() {
         ">
             <div style="display: flex; justify-content: space-between; align-items: center;" id="destructionFeedHeader">
                 <span style="font-weight: bold; color: #e74c3c; display: flex; align-items: center; gap: 5px;">
-                    🔥 Destruction Feed <span id="destructionLatestSummary" style="font-weight: normal; color: #aaa; font-size: 11px;">(No units destroyed yet)</span>
+                    🔥 Destruction Feed <span id="destructionLatestSummary" style="font-weight: normal; color: #aaa; font-size: 11px;">(No events recorded yet)</span>
                 </span>
                 <button id="toggleUnitCountsBtn" style="
                     background: rgba(255,255,255,0.12);
@@ -221,7 +220,7 @@ export function ensureCoinHudBar() {
                 font-size: 11px;
                 color: #ddd;
             ">
-                <div style="color: #7f8c8d; font-style: italic;">No combat destructions recorded.</div>
+                <div style="color: #7f8c8d; font-style: italic;">No combat destructions or captures recorded.</div>
             </div>
             <div id="activeUnitCountsCollapsible" style="
                 display: none;
@@ -240,6 +239,37 @@ export function ensureCoinHudBar() {
                         <div id="redActiveUnitsList" style="margin-top: 3px; color: #bdc3c7;">None (0)</div>
                     </div>
                 </div>
+            </div>
+        </div>
+        <!-- Live Movement Feed Frame -->
+        <div id="movementFeedWidget" style="
+            background: rgba(18, 26, 36, 0.95);
+            border: 1px solid rgba(52, 152, 219, 0.5);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #fff;
+            margin-top: 6px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.6);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: center;" id="movementFeedHeader">
+                <span style="font-weight: bold; color: #3498db; display: flex; align-items: center; gap: 5px;">
+                    🧭 Live Movement Feed <span id="movementLatestSummary" style="font-weight: normal; color: #aaa; font-size: 11px;">(No movements yet)</span>
+                </span>
+            </div>
+            <div id="movementFeedBody" style="
+                max-height: 60px;
+                overflow-y: auto;
+                margin-top: 6px;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                padding-top: 4px;
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+                font-size: 11px;
+                color: #ddd;
+            ">
+                <div style="color: #7f8c8d; font-style: italic;">No unit movements recorded.</div>
             </div>
         </div>
     `;
@@ -273,13 +303,46 @@ export function appendDestructionFeed(unitName, defenderTeam, destroyedBy, attac
     const atkColor = attackerTeam === 'blue' ? '#3498db' : '#e74c3c';
 
     const item = document.createElement('div');
-    item.innerHTML = `[${timeStr}] <strong style="color:${defColor};">${defenderTeam.toUpperCase()} ${unitName}</strong> destroyed by <strong style="color:${atkColor};">${attackerTeam ? attackerTeam.toUpperCase() : 'Enemy'}</strong> (${destroyedBy})`;
+
+    if (destroyedBy === 'GOLD_CORE_CAPTURE' || unitName === 'Gold Core Cluster') {
+        item.innerHTML = `[${timeStr}] 💰 <strong style="color:${atkColor};">${attackerTeam ? attackerTeam.toUpperCase() : ''}</strong> successfully captured a <strong style="color: #f1c40f;">Gold Core Cluster</strong>!`;
+        if (summary) summary.innerText = `(Latest: ${attackerTeam ? attackerTeam.toUpperCase() : ''} captured Gold Core)`;
+    } else if (destroyedBy === 'BASE_CAPTURE' || unitName === 'Base HQ') {
+        item.innerHTML = `[${timeStr}] 🏰 <strong style="color:${atkColor};">${attackerTeam ? attackerTeam.toUpperCase() : ''}</strong> captured <strong style="color:${defColor};">${defenderTeam ? defenderTeam.toUpperCase() : ''}'s Base HQ</strong>!`;
+        if (summary) summary.innerText = `(Latest: ${attackerTeam ? attackerTeam.toUpperCase() : ''} captured Base HQ!)`;
+    } else {
+        item.innerHTML = `[${timeStr}] <strong style="color:${defColor};">${defenderTeam ? defenderTeam.toUpperCase() : ''} ${unitName}</strong> destroyed by <strong style="color:${atkColor};">${attackerTeam ? attackerTeam.toUpperCase() : 'Enemy'}</strong> (${destroyedBy})`;
+        if (summary) summary.innerText = `(Latest: ${defenderTeam ? defenderTeam.toUpperCase() : ''} ${unitName} lost)`;
+    }
+
     body.appendChild(item);
     body.scrollTop = body.scrollHeight;
+}
 
-    if (summary) {
-        summary.innerText = `(Latest: ${defenderTeam.toUpperCase()} ${unitName} lost)`;
+export function appendMovementFeed(unitName, team, fromX, fromY, toX, toY) {
+    ensureCoinHudBar();
+    const body = document.getElementById('movementFeedBody');
+    const summary = document.getElementById('movementLatestSummary');
+    if (!body) return;
+
+    if (body.querySelector('div[style*="font-style: italic"]')) {
+        body.innerHTML = '';
     }
+
+    const timeStr = new Date().toLocaleTimeString();
+    const teamColor = team === 'blue' ? '#3498db' : '#e74c3c';
+
+    const item = document.createElement('div');
+    if (unitName && unitName.startsWith('Deployed')) {
+        item.innerHTML = `[${timeStr}] 📦 <strong style="color:${teamColor};">${team.toUpperCase()}</strong> ${unitName} at (${toX}, ${toY})`;
+        if (summary) summary.innerText = `(Latest: ${team.toUpperCase()} ${unitName} at ${toX},${toY})`;
+    } else {
+        item.innerHTML = `[${timeStr}] <strong style="color:${teamColor};">${team.toUpperCase()} ${unitName}</strong> moved (${fromX}, ${fromY}) ➔ (${toX}, ${toY})`;
+        if (summary) summary.innerText = `(Latest: ${team.toUpperCase()} ${unitName} -> (${toX},${toY}))`;
+    }
+
+    body.appendChild(item);
+    body.scrollTop = body.scrollHeight;
 }
 
 export function updateActiveUnitCounts(unitsList) {
@@ -369,10 +432,14 @@ export function updateTurnTimerDisplay(secondsLeft) {
     }
 }
 
+
 export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, onLeaveCallback, logToConsole, updateTurnStateCallback) {
     ensureCoinHudBar();
 
-    const surrenderBtn = document.getElementById('surrenderBtn');
+    
+
+
+const surrenderBtn = document.getElementById('surrenderBtn');
     if (surrenderBtn) {
         surrenderBtn.onclick = () => {
             if (matchIdRef.current) {
