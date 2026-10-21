@@ -15,7 +15,11 @@ const soundConfigs = {
     antiAirSelect: { src: repoBaseUrl + 'sound17antiairselected.mp3', start: 0, end: 3.5, fadeDuration: 1.0, volume: 0.9 },
     frontalAttack: { src: repoBaseUrl + 'tank.mp3', start: 0.8, end: 2.2, fadeDuration: 0.3, volume: 0.95 },
     rangedAttack: { src: repoBaseUrl + 'artillery.mp3', start: 0, end: 4.0, fadeDuration: 0.5, volume: 0.95 },
-    burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6 }
+    burningCity: { src: repoBaseUrl + 'sound11burningcity.mp3', start: 0, end: 5.0, fadeDuration: 0.5, volume: 0.6 },
+    coinSound: { src: repoBaseUrl + 'Coins.mp3', start: 0, end: 2.5, fadeDuration: 0.5, volume: 0.15 },
+    stalemate: { src: repoBaseUrl + 'stalemate.mp3', volume: 0.8 },
+    metalClang: { src: repoBaseUrl + 'Metal%20Clang%20Sound%20Effect.mp3', start: 0, end: 3.0, fadeDuration: 0.5, volume: 0.95 },
+    warning: { src: repoBaseUrl + 'Warning.mp3', volume: 0.9 }
 };
 
 const hoiSoundtracks = [
@@ -39,6 +43,10 @@ let isMatchMusicActive = false;
 let sfxAudioElement = null;
 let sfxInterval = null;
 
+// Dedicated stalemate sound channel with looping volume attenuation
+let stalemateAudioElement = null;
+let stalemateLoopCount = 0;
+
 export function playSound(soundKey) {
     const config = soundConfigs[soundKey];
     if (!config) return;
@@ -48,7 +56,6 @@ export function playSound(soundKey) {
         sfxAudioElement.preload = 'auto';
     }
 
-    // Stop any currently playing sound effect immediately
     if (sfxInterval) {
         clearInterval(sfxInterval);
         sfxInterval = null;
@@ -105,6 +112,35 @@ export function playSound(soundKey) {
     sfxAudioElement.addEventListener('canplay', onCanPlay);
 }
 
+export function startStalemateSound() {
+    if (stalemateAudioElement && !stalemateAudioElement.paused) return;
+
+    const config = soundConfigs['stalemate'];
+    if (!config) return;
+
+    stalemateLoopCount = 0;
+    stalemateAudioElement = new Audio(config.src);
+    stalemateAudioElement.volume = config.volume; // Normal volume at beginning
+
+    stalemateAudioElement.onended = () => {
+        stalemateLoopCount++;
+        // Subsequent re-loops have significantly less volume (e.g. 25% of normal volume)
+        stalemateAudioElement.volume = config.volume * 0.25;
+        stalemateAudioElement.currentTime = 0;
+        stalemateAudioElement.play().catch(err => console.warn("Stalemate loop playback error:", err));
+    };
+
+    stalemateAudioElement.play().catch(err => console.warn("Stalemate playback blocked:", err));
+}
+
+export function stopStalemateSound() {
+    if (stalemateAudioElement) {
+        stalemateAudioElement.pause();
+        stalemateAudioElement = null;
+        stalemateLoopCount = 0;
+    }
+}
+
 export function triggerSelectSound(unitName) {
     let normalized = (unitName || '').toLowerCase().replace(/[\s-]/g, '');
     if (normalized.includes('infantry')) playSound('infantrySelect');
@@ -136,6 +172,37 @@ export function triggerRangedAttackSound() {
 
 export function playFireAudioEffect() {
     playSound('burningCity');
+}
+
+export function playCoinSound() {
+    playSound('coinSound');
+}
+
+// Dedicated isolated channel for metal clang deployments
+export function playMetalClangSound() {
+    const config = soundConfigs['metalClang'];
+    if (!config) return;
+
+    const deploymentAudio = new Audio(config.src);
+    deploymentAudio.volume = config.volume || 0.95;
+    deploymentAudio.play().catch(err => console.warn("Metal Clang playback blocked or interrupted:", err));
+}
+
+// Dedicated warning sound channel that loops for a set duration matching the beacon overlay
+export function playWarningSound(durationMs = 8000) {
+    const config = soundConfigs['warning'];
+    if (!config) return;
+
+    const warningAudio = new Audio(config.src);
+    warningAudio.loop = true;
+    warningAudio.volume = config.volume || 0.9;
+
+    warningAudio.play().catch(err => console.warn("Warning sound playback blocked or interrupted:", err));
+
+    setTimeout(() => {
+        warningAudio.pause();
+        warningAudio.currentTime = 0;
+    }, durationMs);
 }
 
 // Dedicated, untouched background music channel
