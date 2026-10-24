@@ -7,7 +7,7 @@ import { unitsToDestroy, processDestructions, getUnitMacroRangeTiles, artilleryV
 import { tileCaptures } from './team-logic.js';
 import { updateTurnButtonState, updateGlobalCoinHUD, updateTurnTimerDisplay, updateXpDisplay, appendDestructionFeed, updateActiveUnitCounts } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
-import { checkVictoryConditions } from './game-victory.js';
+import { checkVictoryConditions, addSessionXp, recordUnitLoss } from './game-victory.js';
 import { playCoinSound, playWarningSound } from './sound.js';
 
 export let serverTimeOffset = 0; 
@@ -112,8 +112,12 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
             let targetUnit = item.unit;
             let attackerTeam = item.attackerTeam || (actingUnit ? actingUnit.team : 'blue');
             let defenderTeam = targetUnit.team;
+            let exactUnitName = targetUnit.name || 'Unit';
 
-            let normName = (targetUnit.name || '').toLowerCase();
+            // 1. Pass exact unit name to loss recorder
+            recordUnitLoss(defenderTeam, exactUnitName, attackerTeam);
+
+            let normName = exactUnitName.toLowerCase();
             let rewardCoins = 1.0; 
 
             if (normName.includes('infantry')) {
@@ -129,18 +133,15 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
             let penaltyCoins = parseFloat((rewardCoins / 2).toFixed(1));
             teamCoins[defenderTeam] = parseFloat(Math.max(0, (teamCoins[defenderTeam] || 0) - penaltyCoins).toFixed(1));
 
+            // 2. Local combat XP gain calculation & UI update
             if (attackerTeam === localTeam) {
                 localTeamEarnedCoins = true;
                 let currentUsername = localStorage.getItem('arena_chess_user');
                 playerXp += 25;
+                addSessionXp(25);
                 updateXpDisplay(playerXp);
                 
                 if (currentUsername) {
-                    set(ref(db, `user_xp/${currentUsername}`), {
-                        xp: playerXp,
-                        lastUpdated: getSyncedNow()
-                    }).catch(err => console.error("Failed to sync destruction XP to Firebase:", err));
-
                     localStorage.setItem(`arena_chess_xp_${currentUsername}`, playerXp);
                 }
             }
@@ -149,13 +150,13 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
                 triggerDestructionAlertFallback(targetUnit.gridX, targetUnit.gridY, defenderTeam);
             }
 
-            appendDestructionFeed(targetUnit.name, defenderTeam, item.destroyedBy || 'Combat', attackerTeam);
+            appendDestructionFeed(exactUnitName, defenderTeam, item.destroyedBy || 'Combat', attackerTeam);
 
             let statusBanner = document.getElementById('statusBanner');
             if (statusBanner) {
-                statusBanner.innerHTML = `⚠️ <strong style="color:${defenderTeam === 'blue' ? '#3498db' : '#e74c3c'};">${defenderTeam.toUpperCase()}</strong> unit (${targetUnit.name}) destroyed by <strong style="color:${attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${attackerTeam.toUpperCase()}</strong>! (+${rewardCoins} Coins, -${penaltyCoins} Coins, +25 XP)`;
+                statusBanner.innerHTML = `⚠️ <strong style="color:${defenderTeam === 'blue' ? '#3498db' : '#e74c3c'};">${defenderTeam.toUpperCase()}</strong> unit (${exactUnitName}) destroyed by <strong style="color:${attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${attackerTeam.toUpperCase()}</strong>! (+${rewardCoins} Coins, -${penaltyCoins} Coins, +25 XP)`;
             }
-            logToConsole(`Destruction Alert: ${defenderTeam} lost ${targetUnit.name}. Attacker gained +${rewardCoins} coins, defender lost -${penaltyCoins} coins.`);
+            logToConsole(`Destruction Alert: ${defenderTeam} lost ${exactUnitName}. Attacker gained +${rewardCoins} coins, defender lost -${penaltyCoins} coins.`);
 
             let attackerType = (item.destroyedBy || '').toLowerCase();
             let isFarAttack = attackerType.includes('artillery') || attackerType.includes('ship') || attackerType.includes('anti-air');
@@ -164,6 +165,7 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
             
             triggeredDestructions.push({
                 targetId: targetUnit.id,
+                targetName: exactUnitName,
                 targetX: targetUnit.gridX,
                 targetY: targetUnit.gridY,
                 attackerX: startX,
@@ -188,10 +190,21 @@ export function handleCombatDestructions(canvas, units, teamCoins, logToConsole,
         updateGlobalCoinHUD(teamCoins);
         processDestructions(units);
         updateActiveUnitCounts(units);
+
+        // 3. Network operations at the end
+        let currentUsername = localStorage.getItem('arena_chess_user');
+        if (currentUsername) {
+            set(ref(db, `user_xp/${currentUsername}`), {
+                xp: playerXp,
+                lastUpdated: getSyncedNow()
+            }).catch(err => console.error("Failed to sync destruction XP to Firebase:", err));
+        }
+
         return triggeredDestructions;
     }
     return [];
 }
+
 
 function triggerDestructionAlertFallback(gx, gy, team) {
     if (typeof window.triggerDestructionAlert === 'function') {
@@ -223,6 +236,10 @@ export function startTurnTimer(matchIdRef, playerTeam, currentTurnRef, movedUnit
         timeLeftSec = Math.max(0, Math.min(60, timeLeftSec));
 
         updateTurnTimerDisplay(timeLeftSec);
+
+        checkVictoryConditions(units, matchIdRef.current, logToConsole, window.isGameOverState, (val) => {
+            window.isGameOverState = val;
+        });
 
         if (elapsed >= TURN_TIME_LIMIT_MS && currentTurnRef.current === playerTeam) {
             logToConsole(`Turn time limit (60s) reached! Automatically changing turn.`);
