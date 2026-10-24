@@ -8,7 +8,7 @@ import { handleUnitDeployment, getPendingUnitType, cleanupUnitDeployerPopup } fr
 import { tileCaptures, parseCoord, getGoldCoreCluster } from './team-logic.js';
 import { updateTurnButtonState, updateGlobalCoinHUD, updateXpDisplay } from './game-controls.js';
 import { triggerSelectSound, triggerMoveSound, stopMatchMusic } from './sound.js';
-import { checkVictoryConditions, checkBaseCaptureVictory } from './game-victory.js';
+import { checkVictoryConditions, checkBaseCaptureVictory, addSessionXp, recordTeamMove, recordGoldCoreCapture } from './game-victory.js';
 import { clearArtilleryButtons, handleCombatDestructions, getSyncedNow, playerXp, setPlayerXp } from './game-engine-2.js';
 import { playCoinSound } from './sound.js';
 import { triggerFarDestructionTrails } from './renderer-helpers.js';
@@ -29,6 +29,7 @@ export function addPlayerXp(amount, username) {
     if (!username) return;
     const newXp = playerXp + amount;
     setPlayerXp(newXp);
+    addSessionXp(amount);
     updateXpDisplay(newXp);
 
     set(ref(db, `user_xp/${username}`), {
@@ -42,7 +43,6 @@ export function addPlayerXp(amount, username) {
 export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units, teamCoins, logToConsole, localTeam, currentMatchId, playerTeam, isGameOverSetCallback, updateTurnStateCallback) {
     if (!targetEnemy || !artilleryUnit) return;
 
-    // Validate that the target enemy unit is still actively present on grid
     const activeTarget = units.find(u => u.id === targetEnemy.id && u.gridX === targetEnemy.gridX && u.gridY === targetEnemy.gridY);
     if (!activeTarget) {
         logToConsole(`Artillery Strike Cancelled: Target unit no longer exists at [${targetEnemy.gridX}, ${targetEnemy.gridY}].`);
@@ -67,10 +67,8 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
     let newTurnStartTime = getSyncedNow();
     window.activeTurnStartTime = newTurnStartTime;
 
-    // Clear previous pending destruction arrays
     unitsToDestroy.length = 0;
 
-    // ALWAYS trigger the firing particle animation locally on attacker screen for both hits and misses
     triggerFarDestructionTrails(
         artilleryUnit.gridX, 
         artilleryUnit.gridY, 
@@ -105,14 +103,23 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
     }
 
     clearArtilleryButtons();
-    checkVictoryConditions(units, currentMatchId, logToConsole, window.isGameOverState || false, (val) => { 
-        isGameOverSetCallback(val); 
-    });
-
+    
     artilleryUnit.hasMovedThisTurn = true;
     let nextTurn = playerTeam === 'blue' ? 'red' : 'blue';
     updateTurnButtonState(nextTurn, playerTeam);
 
+    if (typeof updateTurnStateCallback === 'function') {
+        updateTurnStateCallback(nextTurn, newTurnStartTime);
+    }
+
+    clearUnitRangeOverlayButton();
+
+    checkVictoryConditions(units, currentMatchId, logToConsole, window.isGameOverState || false, (val) => { 
+        isGameOverSetCallback(val); 
+        if (val) stopMatchMusic();
+    });
+
+    // Network transfers placed last so core game logic isn't delayed
     if (currentMatchId) {
         let sanitizedTileCaptures = {};
         Object.keys(tileCaptures).forEach(k => {
@@ -146,7 +153,6 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
             }
         });
 
-        // Broadcast artillery fire animation & attempt to both players over Firebase
         push(ref(db, `matches_plus/${currentMatchId}/artilleryAnimations`), {
             fromX: artilleryUnit.gridX,
             fromY: artilleryUnit.gridY,
@@ -158,7 +164,6 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
             timestamp: getSyncedNow()
         });
 
-        // Only push to destruction feed if the unit was successfully destroyed!
         if (success && triggeredDestructions.length > 0) {
             triggeredDestructions.forEach(ev => {
                 push(ref(db, `matches_plus/${currentMatchId}/destructionFeed`), {
@@ -171,12 +176,6 @@ export function triggerArtilleryStrike(targetEnemy, artilleryUnit, canvas, units
             });
         }
     }
-
-    if (typeof updateTurnStateCallback === 'function') {
-        updateTurnStateCallback(nextTurn, newTurnStartTime);
-    }
-
-    clearUnitRangeOverlayButton();
 }
 
 export function handleCanvasClick(e, canvas, state, callbacks) {
@@ -283,6 +282,8 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
             setStagedMove(null);
             triggerMoveSound(selUnit.name);
 
+            recordTeamMove(selUnit.team);
+
             selUnit.animFromX = oldGridX;
             selUnit.animFromY = oldGridY;
             selUnit.animStartTime = performance.now();
@@ -360,6 +361,7 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                             updateGlobalCoinHUD(teamCoinsRef.current);
 
                             didCaptureGoldCore = true;
+                            recordGoldCoreCapture(selUnit.team, 50);
 
                             if (selUnit.team === localTeamRef.current) {
                                 playCoinSound();
@@ -403,6 +405,14 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                 updateTurnButtonState(nextTurn, playerTeamRef.current);
             }
 
+            setSelectedUnit(null);
+            setLegalMoves([]);
+            setStagedMove(null);
+            setSelectionAnimStartTime(null);
+            clearUnitRangeOverlayButton();
+            clearArtilleryButtons();
+
+            // All network message transmissions are performed at the very end
             if (currentMatchIdRef.current) {
                 let sanitizedTileCaptures = {};
                 Object.keys(tileCaptures).forEach(k => {
@@ -454,18 +464,11 @@ export function handleCanvasClick(e, canvas, state, callbacks) {
                         });
                     });
                 }
-            }
 
-            if (didCaptureGoldCore) {
-                notifyGoldCoreCaptured(selUnit.team, currentMatchIdRef.current);
+                if (didCaptureGoldCore) {
+                    notifyGoldCoreCaptured(selUnit.team, currentMatchIdRef.current);
+                }
             }
-
-            setSelectedUnit(null);
-            setLegalMoves([]);
-            setStagedMove(null);
-            setSelectionAnimStartTime(null);
-            clearUnitRangeOverlayButton();
-            clearArtilleryButtons();
         } else {
             setStagedMove(null);
             setSelectedUnit(null);
