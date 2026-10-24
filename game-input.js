@@ -1,4 +1,4 @@
-// game-input.js - Utility helper functions for input coordinate mapping with forgiving touch margins (25% Buffer)
+// game-input.js - Updated with 19% Forgiving Touch Buffer
 import { cols, rows } from './game-config.js';
 
 export function getGridCoordinatesFromClient(clientX, clientY, canvas, cameraX, cameraY, cameraZoom, localTeam) {
@@ -15,15 +15,15 @@ export function getGridCoordinatesFromClient(clientX, clientY, canvas, cameraX, 
     let clickedCol = Math.floor(exactCol);
     let clickedRow = Math.floor(exactRow);
 
-    // Apply forgiving edge tolerance (25% outer buffer snap)
+    // Apply forgiving edge tolerance (19% outer buffer snap)
     let colRemainder = exactCol - clickedCol;
     let rowRemainder = exactRow - clickedRow;
 
-    if (colRemainder < 0.25 && clickedCol > 0) clickedCol -= 1;
-    else if (colRemainder > 0.75 && clickedCol < cols - 1) clickedCol += 1;
+    if (colRemainder < 0.19 && clickedCol > 0) clickedCol -= 1;
+    else if (colRemainder > 0.81 && clickedCol < cols - 1) clickedCol += 1;
 
-    if (rowRemainder < 0.25 && clickedRow > 0) clickedRow -= 1;
-    else if (rowRemainder > 0.75 && clickedRow < rows - 1) clickedRow += 1;
+    if (rowRemainder < 0.19 && clickedRow > 0) clickedRow -= 1;
+    else if (rowRemainder > 0.81 && clickedRow < rows - 1) clickedRow += 1;
 
     if (clickedCol < 0 || clickedCol >= cols || clickedRow < 0 || clickedRow >= rows) {
         return null;
