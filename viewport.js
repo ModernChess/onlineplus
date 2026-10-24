@@ -49,10 +49,6 @@ function getPinchCenter(p1, p2, rect) {
 
 export function initViewportControls(canvas, onTransformUpdate) {
     canvas.addEventListener('pointerdown', (e) => {
-        try {
-            canvas.setPointerCapture(e.pointerId);
-        } catch (err) {}
-        
         activePointers.set(e.pointerId, e);
         
         if (activePointers.size === 1) {
@@ -64,6 +60,7 @@ export function initViewportControls(canvas, onTransformUpdate) {
         } else if (activePointers.size === 2) {
             isDragging = false;
             hasExceededThreshold = true;
+            try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
             const pointers = Array.from(activePointers.values());
             const rect = canvas.getBoundingClientRect();
             initialPinchDistance = getPinchDistance(pointers[0], pointers[1]);
@@ -96,6 +93,8 @@ export function initViewportControls(canvas, onTransformUpdate) {
                 if (distance > DRAG_THRESHOLD) {
                     hasExceededThreshold = true;
                     isDragging = true;
+                    // Capture pointer ONLY when drag threshold is crossed to prevent 🚫 drag cursor
+                    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
                 }
             }
 
