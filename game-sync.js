@@ -3,8 +3,8 @@ import { db, ref, update, get, onValue, off, push } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { updateTurnStatusBanner, updateTurnTimerDisplay, appendDestructionFeed, appendMovementFeed } from './game-controls.js';
 import { triggerFrontalExplosion, triggerFarDestructionTrails } from './renderer-helpers.js';
-import { getRenderCoordinates, triggerDeploymentAlert } from './game-renderer.js';
 import { getSyncedNow } from './game-engine-2.js';
+import { showVictoryScoreboardModal } from './game-victory.js';
 import { triggerMoveSound, startStalemateSound, stopStalemateSound, playMetalClangSound, playWarningSound } from './sound.js';
 
 let matchEndTimeout = null;
@@ -12,18 +12,40 @@ let lastProcessedActionTime = 0;
 let lastProcessedDestructionTime = 0;
 let lastProcessedDeploymentTime = 0;
 let lastProcessedArtilleryTime = 0;
-let lastProcessedDestructionFeedLength = 0;
-let lastProcessedMovementFeedLength = 0;
+let lastMovementHydrationTime = 0;
+let lastDestructionHydrationTime = 0;
 let lastServerTurn = null;
 let isInitialSync = true; 
 let hasHydratedFeeds = false;
 
+export function resetGameFeedsState() {
+    lastProcessedActionTime = 0;
+    lastProcessedDestructionTime = 0;
+    lastProcessedDeploymentTime = Date.now();
+    lastProcessedArtilleryTime = Date.now();
+    lastMovementHydrationTime = Date.now();
+    lastDestructionHydrationTime = Date.now();
+    lastServerTurn = null;
+    isInitialSync = true;
+    hasHydratedFeeds = false;
+    window._lastProcessedActionKey = null;
+
+    // Clear UI feed widgets to restart fresh
+    const destBody = document.getElementById('destructionFeedBody');
+    if (destBody) destBody.innerHTML = `<div style="color: #7f8c8d; font-style: italic;">No combat destructions or captures recorded.</div>`;
+    const destSummary = document.getElementById('destructionLatestSummary');
+    if (destSummary) destSummary.innerText = `(No events recorded yet)`;
+
+    const moveBody = document.getElementById('movementFeedBody');
+    if (moveBody) moveBody.innerHTML = `<div style="color: #7f8c8d; font-style: italic;">No unit movements recorded.</div>`;
+    const moveSummary = document.getElementById('movementLatestSummary');
+    if (moveSummary) moveSummary.innerText = `(No movements yet)`;
+}
+
 export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logToConsole, onMatchEnded, onTurnChanged, tileCapturesRef = null) {
     if (!currentMatchId) return null;
 
-    lastProcessedDeploymentTime = Date.now();
-    lastProcessedArtilleryTime = Date.now();
-    isInitialSync = true;
+    resetGameFeedsState();
 
     const banner = document.getElementById('statusBanner');
     if (banner && !banner.dataset.loaded) {
@@ -33,58 +55,63 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
     const matchRef = ref(db, `matches_plus/${currentMatchId}`);
     
     if (!hasHydratedFeeds) {
+        // Set initial baseline timestamps to ignore pre-existing historical feed items upon joining
+        get(ref(db, `matches_plus/${currentMatchId}`)).then((snapshot) => {
+            if (snapshot.exists()) {
+                const matchData = snapshot.val();
+                if (matchData.movementFeed) {
+                    const moves = Object.values(matchData.movementFeed);
+                    if (moves.length > 0) {
+                        lastMovementHydrationTime = Math.max(...moves.map(m => m.timestamp || 0));
+                    }
+                }
+                if (matchData.destructionFeed) {
+                    const dests = Object.values(matchData.destructionFeed);
+                    if (dests.length > 0) {
+                        lastDestructionHydrationTime = Math.max(...dests.map(d => d.timestamp || 0));
+                    }
+                }
+            }
+        });
+
         onValue(ref(db, `matches_plus/${currentMatchId}/movementFeed`), (snap) => {
             if (snap.exists()) {
                 const moveData = snap.val();
-                const entries = Object.values(moveData);
                 
-                if (lastProcessedMovementFeedLength === 0) {
-                    lastProcessedMovementFeedLength = entries.length;
-                    return;
-                }
+                Object.values(moveData).forEach(latestMove => {
+                    if (latestMove && latestMove.timestamp && latestMove.timestamp > lastMovementHydrationTime) {
+                        lastMovementHydrationTime = latestMove.timestamp;
 
-                if (entries.length > lastProcessedMovementFeedLength) {
-                    const latestMove = entries[entries.length - 1];
-                    lastProcessedMovementFeedLength = entries.length;
-
-                    if (latestMove) {
                         appendMovementFeed(latestMove.unitName, latestMove.team, latestMove.fromX, latestMove.fromY, latestMove.toX, latestMove.toY);
                         
                         if (latestMove.team !== playerTeam) {
                             triggerMoveSound(latestMove.unitName);
+                        }
 
-                            if (typeof window.triggerMovementArrowTrail === 'function') {
-                                window.triggerMovementArrowTrail(latestMove.fromX, latestMove.fromY, latestMove.toX, latestMove.toY, latestMove.team);
-                            }
+                        // Render movement arrow trails for both Blue and Red actions
+                        if (typeof window.triggerMovementArrowTrail === 'function') {
+                            window.triggerMovementArrowTrail(latestMove.fromX, latestMove.fromY, latestMove.toX, latestMove.toY, latestMove.team);
                         }
                     }
-                }
+                });
             }
         });
 
-        // LIVE DESTRUCTION & CAPTURE FEED SYNCHRONIZATION LISTENER
         onValue(ref(db, `matches_plus/${currentMatchId}/destructionFeed`), (snap) => {
             if (snap.exists()) {
                 const feedData = snap.val();
-                const entries = Object.values(feedData);
 
-                if (lastProcessedDestructionFeedLength === 0) {
-                    lastProcessedDestructionFeedLength = entries.length;
-                    return;
-                }
+                Object.values(feedData).forEach(latestEvent => {
+                    if (latestEvent && latestEvent.timestamp && latestEvent.timestamp > lastDestructionHydrationTime) {
+                        lastDestructionHydrationTime = latestEvent.timestamp;
 
-                if (entries.length > lastProcessedDestructionFeedLength) {
-                    const latestEvent = entries[entries.length - 1];
-                    lastProcessedDestructionFeedLength = entries.length;
-
-                    if (latestEvent) {
-                        appendDestructionFeed(latestEvent.unitName, latestEvent.defenderTeam, latestEvent.destroyedBy || 'Combat', latestEvent.attackerTeam);
+                        let unitName = latestEvent.unitName || latestEvent.name || latestEvent.targetName || latestEvent.unit || 'Unit';
+                        appendDestructionFeed(unitName, latestEvent.defenderTeam, latestEvent.destroyedBy || 'Combat', latestEvent.attackerTeam);
                     }
-                }
+                });
             }
         });
 
-        // LIVE REAL-TIME ARTILLERY SYNC (FIRED FOR BOTH SUCCESSES AND MISSES ON BOTH TEAMS)
         onValue(ref(db, `matches_plus/${currentMatchId}/artilleryAnimations`), (snap) => {
             if (snap.exists()) {
                 const artData = snap.val();
@@ -94,7 +121,6 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                 if (latestArt && latestArt.timestamp > lastProcessedArtilleryTime) {
                     lastProcessedArtilleryTime = latestArt.timestamp;
 
-                    // Play long-range artillery firing particle animation on opponent screen
                     if (latestArt.attackerTeam !== playerTeam) {
                         const canvas = document.getElementById('gameCanvas');
                         if (canvas) {
@@ -112,9 +138,9 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
                         let statusBanner = document.getElementById('statusBanner');
                         if (statusBanner) {
                             if (latestArt.success) {
-                                statusBanner.innerHTML = `💥 <strong style="color:${latestArt.attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${latestArt.attackerTeam.toUpperCase()}</strong> Artillery successfully struck${latestArt.targetName}!`;
+                                statusBanner.innerHTML = `💥 <strong style="color:${latestArt.attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${latestArt.attackerTeam.toUpperCase()}</strong> Artillery successfully struck ${latestArt.targetName}!`;
                             } else {
-                                statusBanner.innerHTML = `💨 <strong style="color:${latestArt.attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${latestArt.attackerTeam.toUpperCase()}</strong> Artillery missed${latestArt.targetName}!`;
+                                statusBanner.innerHTML = `💨 <strong style="color:${latestArt.attackerTeam === 'blue' ? '#3498db' : '#e74c3c'};">${latestArt.attackerTeam.toUpperCase()}</strong> Artillery missed ${latestArt.targetName}!`;
                             }
                         }
                     }
@@ -148,8 +174,13 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             onTurnChanged(match.turn, match);
         }
         
-        if (match.lastAction && match.lastAction.timestamp > lastProcessedActionTime) {
-            lastProcessedActionTime = match.lastAction.timestamp;
+        // Check for actions from either team using a unique signature check
+        if (match.lastAction) {
+            const actionKey = `${match.lastAction.timestamp}_${match.lastAction.type}_${match.lastAction.team}`;
+            if (actionKey !== window._lastProcessedActionKey) {
+                window._lastProcessedActionKey = actionKey;
+                lastProcessedActionTime = match.lastAction.timestamp;
+            }
         }
 
         if (match.lastDeployment && match.lastDeployment.timestamp) {
@@ -305,14 +336,46 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
             if (banner) {
                 banner.innerHTML = `<div style="background: #2c3e50; color: #f1c40f; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center;">Match Ended! Winner: ${match.winner ? match.winner.toUpperCase() : 'Draw'}</div>`;
             }
-            logToConsole(`Match ended. Winner: ${match.winner}. Returning to lobby in 4 seconds...`);
             
+            // Dynamically parse shared destructionFeed to ensure accurate team-specific stats
+            let stats = match.matchStats || {};
+            if (match.destructionFeed) {
+                let blueCores = 0;
+                let redCores = 0;
+                let blueLostCount = 0;
+                let redLostCount = 0;
+
+                Object.values(match.destructionFeed).forEach(item => {
+                    if (item.destroyedBy === 'GOLD_CORE_CAPTURE') {
+                        if (item.attackerTeam === 'blue') blueCores++;
+                        else if (item.attackerTeam === 'red') redCores++;
+                    } else {
+                        if (item.defenderTeam === 'blue') {
+                            blueLostCount++;
+                        } else if (item.defenderTeam === 'red') {
+                            redLostCount++;
+                        }
+                    }
+                });
+
+                stats.blueGoldCoresCaptured = blueCores;
+                stats.redGoldCoresCaptured = redCores;
+                stats.blueGoldCoreXp = blueCores * 50;
+                stats.redGoldCoreXp = redCores * 50;
+                
+                stats.blueUnitsLost = blueLostCount;
+                stats.redUnitsLost = redLostCount;
+            }
+
+            // Pass local playerTeam explicitly to ensure correct team perspective
+            showVictoryScoreboardModal(match.winner || 'draw', stats, playerTeam);
+
             if (!matchEndTimeout) {
                 matchEndTimeout = setTimeout(() => {
                     if (onMatchEnded) onMatchEnded();
                     showScreen('lobby-screen');
                     matchEndTimeout = null;
-                }, 4000);
+                }, 10000);
             }
         } else {
             let activePlayerName = isMyTurn ? myName : opponentName;
@@ -339,11 +402,7 @@ export function listenToMatchUpdates(currentMatchId, playerTeam, unitsRef, logTo
     return () => {
         off(matchRef);
         stopStalemateSound();
-        hasHydratedFeeds = false;
-        lastProcessedDeploymentTime = 0;
-        lastProcessedArtilleryTime = 0;
-        lastProcessedDestructionFeedLength = 0;
-        lastProcessedMovementFeedLength = 0;
+        resetGameFeedsState();
         if (matchEndTimeout) {
             clearTimeout(matchEndTimeout);
             matchEndTimeout = null;
@@ -418,3 +477,8 @@ export function listenToMatchChat(currentMatchId, currentUser) {
 function escapeHtml(str) {
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+
+
+
+
