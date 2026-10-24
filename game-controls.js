@@ -1,4 +1,4 @@
-// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, XP Bar, Destruction Feed, Movement Feed, and Active Unit Counts
+// game-controls.js - Manages Action Buttons, Turn States, Global Coin HUD, Live Timer, XP Bar, Destruction Feed, Movement Feed, Active Unit Counts, and Faction Ranks
 import { db, ref, update } from './network.js';
 import { clearUnitRangeOverlayButton } from './unit-movement.js';
 
@@ -10,6 +10,31 @@ export function createConsoleLogger() {
         logs.innerHTML += `[${time}] ${msg}<br>`;
         logs.scrollTop = logs.scrollHeight;
     };
+}
+
+// Dynamically fetch player rank from XP and Faction ('Order' or 'Syndicate')
+export function getRankFromXp(xp = 0, faction = 'Order') {
+    const isSyndicate = (faction && faction.toLowerCase() === 'syndicate');
+
+    if (isSyndicate) {
+        if (xp >= 500000) return { title: "Dreadlord", badge: "⚡⚡" };
+        if (xp >= 180000) return { title: "Extractor", badge: "🟧" };
+        if (xp >= 65000)  return { title: "Executioner", badge: "🗡️" };
+        if (xp >= 22000)  return { title: "Castigator", badge: "🔶🔶" };
+        if (xp >= 7500)   return { title: "Infiltrator", badge: "☣️" };
+        if (xp >= 2500)   return { title: "Larcener", badge: "🔶" };
+        if (xp >= 500)    return { title: "Scout", badge: "⚡" };
+        return { title: "Trainee", badge: "🔸" };
+    } else {
+        if (xp >= 500000) return { title: "Paladin", badge: "🛡️🛡️" };
+        if (xp >= 180000) return { title: "Elite Knight", badge: "🟦" };
+        if (xp >= 65000)  return { title: "Commander", badge: "⚔️" };
+        if (xp >= 22000)  return { title: "Knight", badge: "🔷🔷" };
+        if (xp >= 7500)   return { title: "Baron", badge: "👑" };
+        if (xp >= 2500)   return { title: "Count", badge: "🔷" };
+        if (xp >= 500)    return { title: "Squire", badge: "🛡️" };
+        return { title: "Trainee", badge: "🔹" };
+    }
 }
 
 export function updateTurnButtonState(currentTurn, playerTeam) {
@@ -165,7 +190,7 @@ export function ensureCoinHudBar() {
         <div id="xpDisplayFrame" class="xp-bar-frame">
             <div id="xpProgressTrack" class="xp-progress-track"></div>
             <span class="xp-text-label">PLAYER XP: <strong id="playerXpText" style="color: #fff;">0 XP</strong></span>
-            <span id="playerXpLevelTag" class="xp-text-label" style="font-size: 11px; opacity: 0.85;">LVL 1</span>
+            <span id="playerXpLevelTag" class="xp-text-label" style="font-size: 11px; opacity: 0.85;">Trainee 🔹</span>
         </div>
         <div id="turnStatusBanner" class="turn-status-banner turn-status-blue">
             <span>⚔️ Turn:</span> 
@@ -174,13 +199,13 @@ export function ensureCoinHudBar() {
         </div>
         <div class="hud-main-row">
             <div class="team-coin-widget blue-team-frame">
-                <span class="coin-icon">C</span> Blue: <span id="blueCoinCount">0</span>
+                <span class="coin-icon">C</span> Blue: <span id="blueCoinCount">0.00</span>
             </div>
             <div class="turn-timer-widget">
                 ⏳ <span id="turnTimerClock">60s</span>
             </div>
             <div class="team-coin-widget red-team-frame">
-                <span class="coin-icon">C</span> Red: <span id="redCoinCount">0</span>
+                <span class="coin-icon">C</span> Red: <span id="redCoinCount">0.00</span>
             </div>
         </div>
         <!-- Advanced Destruction Feed Frame -->
@@ -374,7 +399,7 @@ export function updateActiveUnitCounts(unitsList) {
     redListEl.innerText = countTeamUnits('red');
 }
 
-export function updateXpDisplay(currentXp = 0) {
+export function updateXpDisplay(currentXp = 0, playerFaction) {
     ensureCoinHudBar();
     const xpText = document.getElementById('playerXpText');
     const xpTrack = document.getElementById('xpProgressTrack');
@@ -382,11 +407,37 @@ export function updateXpDisplay(currentXp = 0) {
 
     if (xpText) xpText.innerText = `${currentXp} XP`;
     
-    const level = Math.floor(currentXp / 100) + 1;
-    const progressInLevel = currentXp % 100;
-    
-    if (xpLevelTag) xpLevelTag.innerText = `LVL ${level}`;
-    if (xpTrack) xpTrack.style.width = `${Math.min(100, progressInLevel)}%`;
+    // Check if an admin override rank exists in localStorage first
+    const adminAssignedRank = localStorage.getItem('arena_chess_rank');
+    const faction = playerFaction || localStorage.getItem('arena_chess_faction') || 'Order';
+
+    if (adminAssignedRank) {
+        if (xpLevelTag) xpLevelTag.innerText = adminAssignedRank;
+    } else {
+        const currentRank = getRankFromXp(currentXp, faction);
+        if (xpLevelTag) xpLevelTag.innerText = `${currentRank.title} ${currentRank.badge}`;
+    }
+
+    let progressPercent = 0;
+    if (currentXp < 500) {
+        progressPercent = (currentXp / 500) * 100;
+    } else if (currentXp < 2500) {
+        progressPercent = ((currentXp - 500) / (2500 - 500)) * 100;
+    } else if (currentXp < 7500) {
+        progressPercent = ((currentXp - 2500) / (7500 - 2500)) * 100;
+    } else if (currentXp < 22000) {
+        progressPercent = ((currentXp - 7500) / (22000 - 7500)) * 100;
+    } else if (currentXp < 65000) {
+        progressPercent = ((currentXp - 22000) / (65000 - 22000)) * 100;
+    } else if (currentXp < 180000) {
+        progressPercent = ((currentXp - 65000) / (180000 - 65000)) * 100;
+    } else if (currentXp < 500000) {
+        progressPercent = ((currentXp - 180000) / (500000 - 180000)) * 100;
+    } else {
+        progressPercent = 100; // Cap at max Paladin/Dreadlord rank
+    }
+
+    if (xpTrack) xpTrack.style.width = `${Math.min(100, Math.max(0, progressPercent))}%`;
 }
 
 export function updateCoinHud(teamCoins) {
@@ -396,9 +447,16 @@ export function updateCoinHud(teamCoins) {
     const blueElem = document.getElementById('blueCoinCount');
     const redElem = document.getElementById('redCoinCount');
     
-    if (blueElem) blueElem.innerText = teamCoins.blue ?? 0;
-    if (redElem) redElem.innerText = teamCoins.red ?? 0;
+    const formatCoinValue = (val) => {
+        const num = Number(val ?? 0);
+        // Round to 1 decimal place (e.g., 3.123322 -> 3.1, 3.0 -> 3)
+        return Math.round(num * 10) / 10;
+    };
+
+    if (blueElem) blueElem.innerText = formatCoinValue(teamCoins.blue);
+    if (redElem) redElem.innerText = formatCoinValue(teamCoins.red);
 }
+
 
 export const updateGlobalCoinHUD = updateCoinHud;
 
@@ -432,14 +490,10 @@ export function updateTurnTimerDisplay(secondsLeft) {
     }
 }
 
-
 export function ensureGameActionButtons(matchIdRef, teamRef, turnRef, movedUnitsThisTurn, animRef, onLeaveCallback, logToConsole, updateTurnStateCallback) {
     ensureCoinHudBar();
 
-    
-
-
-const surrenderBtn = document.getElementById('surrenderBtn');
+    const surrenderBtn = document.getElementById('surrenderBtn');
     if (surrenderBtn) {
         surrenderBtn.onclick = () => {
             if (matchIdRef.current) {
