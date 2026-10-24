@@ -1,4 +1,4 @@
-// game-renderer-2.js - Handles unit rendering, image loading selection, rotation angles, shadows, and status badges
+// game-renderer-2.js - Unit renderer with tinier triangular ordinal division badges
 import { 
     cols, rows, 
     blueAntiairImg, blueAntiairLoaded, redAntiairImg, redAntiairLoaded, 
@@ -12,6 +12,14 @@ import {
 } from './game-config.js';
 import { stalematedUnits } from './combat-mechanics.js';
 import { spawnSmokeTrail } from './renderer-helpers.js';
+
+// Helper for ordinal display text inside the badge (1st, 2nd, 3rd...)
+function getOrdinalText(n) {
+    if (!n) return '';
+    let s = ["th", "st", "nd", "rd"];
+    let v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 export function drawUnitsAndBadges(ctx, canvas, units, selectedUnit, localTeam, detectedUnitIds, singleBadgeMap, teamSuperunitsMap, selectionAnimStartTime, getRenderCoordinates) {
     units.forEach(unit => {
@@ -93,29 +101,29 @@ export function drawUnitsAndBadges(ctx, canvas, units, selectedUnit, localTeam, 
         let normalizedUnitName = (unit.name || '').toLowerCase().replace(/[\s-]/g, '');
 
         if (unit.team === 'blue') {
-            if (normalizedUnitName === 'antiair') { unitImg = blueAntiairImg; isLoaded = blueAntiairLoaded; }
-            else if (normalizedUnitName === 'artillery') { unitImg = blueArtilleryImg; isLoaded = blueArtilleryLoaded; }
-            else if (normalizedUnitName === 'engineer') { unitImg = blueEngineerImg; isLoaded = blueEngineerLoaded; }
-            else if (normalizedUnitName === 'infantry') { unitImg = blueInfantryImg; isLoaded = blueInfantryLoaded; }
-            else if (normalizedUnitName === 'mine') { unitImg = blueMineImg; isLoaded = blueMineLoaded; }
-            else if (normalizedUnitName === 'plane') { unitImg = bluePlaneImg; isLoaded = bluePlaneLoaded; }
-            else if (normalizedUnitName === 'ship') { unitImg = blueShipImg; isLoaded = blueShipLoaded; }
-            else if (normalizedUnitName === 'tank') { unitImg = blueTankImg; isLoaded = blueTankLoaded; }
+            if (normalizedUnitName.includes('antiair')) { unitImg = blueAntiairImg; isLoaded = blueAntiairLoaded; }
+            else if (normalizedUnitName.includes('artillery')) { unitImg = blueArtilleryImg; isLoaded = blueArtilleryLoaded; }
+            else if (normalizedUnitName.includes('engineer')) { unitImg = blueEngineerImg; isLoaded = blueEngineerLoaded; }
+            else if (normalizedUnitName.includes('infantry')) { unitImg = blueInfantryImg; isLoaded = blueInfantryLoaded; }
+            else if (normalizedUnitName.includes('mine')) { unitImg = blueMineImg; isLoaded = blueMineLoaded; }
+            else if (normalizedUnitName.includes('plane')) { unitImg = bluePlaneImg; isLoaded = bluePlaneLoaded; }
+            else if (normalizedUnitName.includes('ship') || normalizedUnitName.includes('fleet')) { unitImg = blueShipImg; isLoaded = blueShipLoaded; }
+            else if (normalizedUnitName.includes('tank')) { unitImg = blueTankImg; isLoaded = blueTankLoaded; }
         } else {
-            if (normalizedUnitName === 'antiair') { unitImg = redAntiairImg; isLoaded = redAntiairLoaded; }
-            else if (normalizedUnitName === 'artillery') { unitImg = redArtilleryImg; isLoaded = redArtilleryLoaded; }
-            else if (normalizedUnitName === 'engineer') { unitImg = redEngineerImg; isLoaded = redEngineerLoaded; }
-            else if (normalizedUnitName === 'infantry') { unitImg = redInfantryImg; isLoaded = redInfantryLoaded; }
-            else if (normalizedUnitName === 'mine') { unitImg = redMineImg; isLoaded = redMineLoaded; }
-            else if (normalizedUnitName === 'plane') { unitImg = redPlaneImg; isLoaded = redPlaneLoaded; }
-            else if (normalizedUnitName === 'ship') { unitImg = redShipImg; isLoaded = redShipLoaded; }
-            else if (normalizedUnitName === 'tank') { unitImg = redTankImg; isLoaded = redTankLoaded; }
+            if (normalizedUnitName.includes('antiair')) { unitImg = redAntiairImg; isLoaded = redAntiairLoaded; }
+            else if (normalizedUnitName.includes('artillery')) { unitImg = redArtilleryImg; isLoaded = redArtilleryLoaded; }
+            else if (normalizedUnitName.includes('engineer')) { unitImg = redEngineerImg; isLoaded = redEngineerLoaded; }
+            else if (normalizedUnitName.includes('infantry')) { unitImg = redInfantryImg; isLoaded = redInfantryLoaded; }
+            else if (normalizedUnitName.includes('mine')) { unitImg = redMineImg; isLoaded = redMineLoaded; }
+            else if (normalizedUnitName.includes('plane')) { unitImg = redPlaneImg; isLoaded = redPlaneLoaded; }
+            else if (normalizedUnitName.includes('ship') || normalizedUnitName.includes('fleet')) { unitImg = redShipImg; isLoaded = redShipLoaded; }
+            else if (normalizedUnitName.includes('tank')) { unitImg = redTankImg; isLoaded = redTankLoaded; }
         }
 
         let cellCenterX = unit.animX + targetPos.cellSize / 2;
         let cellCenterY = renderDrawY + targetPos.cellSize / 2;
         
-        let sizeMultiplier = (normalizedUnitName === 'mine') ? 1.2 : 2.0;
+        let sizeMultiplier = (normalizedUnitName.includes('mine')) ? 1.2 : 2.0;
         let drawSize = (targetPos.cellSize - 4) * sizeMultiplier; 
 
         ctx.save();
@@ -134,7 +142,7 @@ export function drawUnitsAndBadges(ctx, canvas, units, selectedUnit, localTeam, 
         } else {
             ctx.fillStyle = unit.team === 'blue' ? '#2196F3' : '#ff5252';
             ctx.beginPath();
-            ctx.arc(0, 0, targetPos.cellSize / (normalizedUnitName === 'mine' ? 3.5 : 2.5), 0, Math.PI * 2);
+            ctx.arc(0, 0, targetPos.cellSize / (normalizedUnitName.includes('mine') ? 3.5 : 2.5), 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.restore();
@@ -149,6 +157,45 @@ export function drawUnitsAndBadges(ctx, canvas, units, selectedUnit, localTeam, 
             ctx.lineWidth = 2;
             ctx.setLineDash([4, 2, 2, 2]);
             ctx.strokeRect(unit.animX + 4, renderDrawY + 4, targetPos.cellSize - 8, targetPos.cellSize - 8);
+        }
+
+        // ==========================================================
+        // RENDER TINIER TRIANGULAR ORDINAL DIVISION BADGE FRAME
+        // ==========================================================
+        if (unit.divisionNumber !== undefined && unit.divisionNumber !== null) {
+            ctx.save();
+            let triWidth = Math.max(14, targetPos.cellSize * 0.32);
+            let triHeight = Math.max(12, targetPos.cellSize * 0.28);
+            
+            let tipX = unit.animX + targetPos.cellSize - 3;
+            let tipY = renderDrawY + targetPos.cellSize - triHeight - 2;
+            let leftX = tipX - triWidth;
+            let baseY = tipY + triHeight;
+
+            // Background triangle styling
+            ctx.fillStyle = unit.team === 'blue' ? '#1e3a8a' : '#7f1d1d';
+            ctx.strokeStyle = '#f1c40f';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            ctx.moveTo(tipX - triWidth / 2, tipY); // Top tip center
+            ctx.lineTo(tipX, baseY);                 // Bottom right corner
+            ctx.lineTo(leftX, baseY);                // Bottom left corner
+            ctx.closePath();
+            
+            ctx.fill();
+            ctx.stroke();
+
+            // Ordinal text inside triangle badge (e.g. 1st, 2nd, 3rd)
+            let ordinalStr = getOrdinalText(unit.divisionNumber);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let fontSize = ordinalStr.length > 3 ? 5 : 6;
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.fillText(ordinalStr, leftX + triWidth / 2, baseY - triHeight * 0.38);
+            ctx.restore();
         }
 
         let clusterPower = singleBadgeMap.get(unit.id);
