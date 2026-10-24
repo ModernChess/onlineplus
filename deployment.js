@@ -1,4 +1,4 @@
-// deployment.js - Handles Unit Purchasing, Affordability Checks, and Grid Placement Logic for Allowed Units
+// deployment.js - Handles Unit Purchasing and Deployment (Preserving standard unit names for combat compatibility)
 import { db, ref, update, push } from './network.js';
 import { 
     isWaterTerrain 
@@ -14,7 +14,6 @@ import {
 } from './deployment-2.js';
 import { getSyncedNow } from './game-engine-2.js';
 import { triggerDeploymentAlert } from './game-renderer.js';
-import { playMetalClangSound } from './sound.js';
 
 export { setTeamCoinsRef, setCurrentTeamRef, getTeamCoins, setDeploymentUnits, getIsShopOpen, isTileValidForTeam, getPendingUnitType, setPendingUnitType };
 
@@ -227,12 +226,16 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
         unitRange = 2;
     }
 
+    // Keep standard name for combat logic compatibility, count type quantity for ordinal badge index
     let formattedName = pendingUnitType.charAt(0).toUpperCase() + pendingUnitType.slice(1);
+    let countOfType = activeUnits.filter(u => u.team === playerTeam && normalizeType(u.name).includes(typeLower)).length + 1;
+    
     let deploymentTimestamp = getSyncedNow();
 
     const newUnit = {
         id: 'test_' + Math.random().toString(36).substring(2, 9),
-        name: formattedName,
+        name: formattedName,             // Standard name ("Infantry", "Tank", etc.) for destructions & rules
+        divisionNumber: countOfType,     // Sequential number index for renderer badge (1, 2, 3...)
         type: unitTypeVal,
         range: unitRange,
         team: playerTeam,
@@ -247,11 +250,9 @@ export function handleUnitDeployment(clickedCol, clickedRow, playerTeam, units, 
     };
 
     activeUnits.push(newUnit);
-    logToConsole(`Placed new unit ${newUnit.name} at coordinates [${clickedCol}, ${clickedRow}]`);
+    logToConsole(`Placed new unit ${newUnit.name} (#${newUnit.divisionNumber}) at coordinates [${clickedCol}, ${clickedRow}]`);
 
-    // Trigger local visual deployment warning beacon and metal clang sound effect for yourself
     triggerDeploymentAlert(clickedCol, clickedRow, playerTeam);
-    playMetalClangSound();
 
     cleanupUnitDeployerPopup();
 
