@@ -1,4 +1,4 @@
-// game-engine.js - Game Loop and Core Cluster Capture Logic (OnlinePlus Version - Firebase XP Persistence Fixed)
+// game-engine.js - Game Loop and Core Cluster Capture Logic (OnlinePlus Version - Victory Sync Fixed)
 import { db, ref, update, get, onValue } from './network.js';
 import { showScreen } from './ui-manager.js';
 import { cols, rows, spawnTeamUnits } from './game-config.js';
@@ -104,7 +104,6 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
     });
 
     if (coinIncomeInterval) clearInterval(coinIncomeInterval);
-    // Coin income interval duration made 2x longer (changed from 2000ms to 4000ms)
     setInterval(() => {
         if (isGameOver) return;
 
@@ -243,6 +242,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
 
             updateActiveUnitCounts(units);
 
+            // EVALUATE VICTORY CONDITIONS ON EVERY SYNC PACKET FROM FIREBASE
             checkVictoryConditions(units, currentMatchId, logToConsole, isGameOver, (val) => { 
                 isGameOver = val; 
                 window.isGameOverState = val;
@@ -255,6 +255,7 @@ export function startGameSession(matchId, team, user, onLeaveCallback) {
                     clearArtilleryButtons();
                 }
             });
+
             updateTurnButtonState(currentTurn, playerTeam);
         }
     );
