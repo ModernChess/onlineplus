@@ -141,20 +141,20 @@ export function getTerrain(col, row) {
 }
 
 export function spawnTeamUnits(team, unitsList) {
-    let baseList = (team === 'blue') ? blueBasesList : redBasesList;
+    // Spawn exactly one infantry unit per team at their central/primary base coordinate with divisionNumber set to 1 for the triangular badge
+    let spawnCoord = (team === 'blue') ? "1,11" : "11,1";
+    let [gx, gy] = spawnCoord.split(',').map(Number);
 
-    baseList.forEach((coordStr, index) => {
-        let [gx, gy] = coordStr.split(',').map(Number);
-        unitsList.push({
-            id: `${team}_spawn_infantry_${index}_${Date.now()}`,
-            team: team,
-            name: 'Infantry',
-            type: 'land',
-            gridX: gx,
-            gridY: gy,
-            range: 2,
-            health: 100,
-            hasMovedThisTurn: false
-        });
+    unitsList.push({
+        id: `${team}_spawn_infantry_0_${Date.now()}`,
+        team: team,
+        name: 'Infantry',
+        divisionNumber: 1,
+        type: 'land',
+        gridX: gx,
+        gridY: gy,
+        range: 2,
+        health: 100,
+        hasMovedThisTurn: false
     });
 }
